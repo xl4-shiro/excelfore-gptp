@@ -1,0 +1,89 @@
+* Statistics Information
+All ptp messages are counted and the number can be reported through IPC.
+'GPTPIPC_CMD_REQ_STAT_INFO' requests the data.
+'GPTPIPC_CMD_REQ_STAT_INFO_RESET' requests resetting the data.
+if domainNumber==-1, it shows the information about all domains.
+if portIndex==0, it shows the information about all ports.
+
+** gptpipcmon, command 'T' and 'R'
+
+#+BEGIN_SRC
+T 0,1 (request the information about Domain=0,Port=1)
+GPTPD_STATSD --- portIndex=1
+pdelay_req_send=112
+pdelay_resp_rec=111
+pdelay_resp_rec_valid=111
+pdelay_resp_fup_rec=111
+pdelay_resp_fup_rec_valid=111
+pdelay_req_rec=112
+pdelay_req_rec_valid=112
+pdelay_resp_send=112
+pdelay_resp_fup_send=112
+GPTPD_STATTD --- domainNumber=0 portIndex=1
+sync_send=913
+sync_fup_send=913
+sync_rec=32
+sync_rec_valid=0
+sync_fup_rec=32
+sync_fup_rec_valid=0
+signal_msg_interval_send=0
+signal_gptp_capable_send=15
+signal_rec=15
+signal_msg_interval_rec=0
+signal_gptp_capable_rec=15
+
+T 1,1 (request the information about Domain=1,Port=1)
+GPTPD_STATTD --- domainNumber=1 portIndex=1
+sync_send=6
+sync_fup_send=6
+sync_rec=974
+sync_rec_valid=942
+sync_fup_rec=974
+sync_fup_rec_valid=942
+signal_msg_interval_send=0
+signal_gptp_capable_send=16
+signal_rec=15
+signal_msg_interval_rec=0
+signal_gptp_capable_rec=15
+#+END_SRC
+
+* Test with injecting abnormal events
+** register abnormal events by IPC commands
+'GPTPIPC_CMD_REG_ABNORMAL_EVENT'
+domainNumber and portIndex are used to identify the domain and the port.
+
+the fields in 'gptpipc_client_req_abnormal_t' defines an error event to register/deregister.
+check 'gptpipc.h' for the detail.
+
+** register/deregister by 'gptpipcmon'
+use 'A' command to register, and 'a' command to deregister.
+'A domain,port,msgtype,eventtype,eventrate,repeat,interval,eventpara'
+  msgtype='none|sync|fup|pdreq|pdres|pdrfup|ann|sign'
+    sync:SYNC, fup:FollowUp, pdreq:PDelayReq, pdres:PDelayResponse,
+    pdrfup:PDelayResponseFollowUp, ann:Announce, sign:Signaling
+  eventtype='none|skip|dup|badsqn|nots|sender'
+    skip: skip sending, dup: duplicate sending, badsqn: screw up sequenceID,
+    nots: miss timestamp data, sender: make send error
+  eventrate='0.0 to 1.0'
+    with this rate, the abnormal event is injected. repeating events are always with '1.0'
+  repeat: repeat times, 0 is infinite times
+  interval: interval when repeat > 1
+  eventpara: parameter for the event
+
+.E.G
+  'A 0,1,sync,skip,1.0,0,0,0': skip sending out 'SYNC' every time on domian=0,port=1
+  'a 0,1,sync,skip,1.0,0,0,0': deregister the above event
+  ('a': deregister all events, can be used for convenience)
+
+  'A 0,1,pdres,badsqn,1.0,10,1,2': repeate 10 times with interval=1(every other timing)
+                                   to add 2 on sequenceID of PDelayReq message
+                                   'eventpara' is used as the number to add on sequenceID
+** abnormal_test.py
+this python script runs 2 'gptp2d' in the test mode, and run a menu to register some
+ready made abnormal events.
+
+There is no Pass/Fail indication in the result of this test script.
+The console output should be checked for that.
+
+To change the 'ready made abnormal events', edit 'class MenuItems' in 'abnormal_test.py'.
+It should be easy.

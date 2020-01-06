@@ -1,0 +1,29 @@
+#!/bin/sh
+# sample script to be called trhough gptpipc
+export USER=`whoami`
+export HOME="/home/${USER}"
+
+kill_all()
+{
+	if pidof -x run_listener_1722; then killall -SIGINT run_listener_1722; fi
+	if pidof -x run_talker_1722; then killall -SIGINT run_talker_1722; fi
+	if pidof -x run_listener_1722; then killall -SIGKILL run_listener_1722; fi
+	if pidof -x run_talker_1722; then killall -SIGKILL run_talker_1722; fi
+	if pidof async_multiexec; then killall async_multiexec; fi
+}
+
+# at first, try to kill all anyway
+kill_all
+case $1 in
+    0)
+    ;;
+    1)
+	nomrp_listener.sh -d eth0 -m 2
+    ;;
+    2)
+	nomrp_talker.sh -d eth0 -m 2
+    ;;
+    *)
+	echo "unknown option arguments: $@"
+    ;;
+esac

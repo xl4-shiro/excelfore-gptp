@@ -1,0 +1,120 @@
+# 1st column: item number
+# 2nd column: State Machine Data type without suffix of 'SM'
+# 3rd column: header file name in which "State Machine Data type" is defined
+# 4th column: template c file
+# 5th column: S-system global, D-domain only, P-port only, DP-domain and port
+# 6th column: data pointers which passed into the init function
+# 7th column: state name list of the state machine 
+header_file []
+--- START ---
+1 MDPdelayReq mdeth.h sm_temp.c P \
+gptpnet_data_t,PerTimeAwareSystemGlobal,PerPortGlobal,MDEntityGlobal \
+NOT_ENABLED,INITIAL_SEND_PDELAY_REQ,RESET,SEND_PDELAY_REQ,WAITING_FOR_PDELAY_RESP,\
+WAITING_FOR_PDELAY_RESP_FOLLOW_UP,WAITING_FOR_PDELAY_INTERVAL_TIMER
+2 MDPdelayResp mdeth.h sm_temp.c P \
+gptpnet_data_t,PerTimeAwareSystemGlobal,PerPortGlobal \
+NOT_ENABLED,INITIAL_WAITING_FOR_PDELAY_REQ,WAITING_FOR_PDELAY_REQ,\
+SENT_PDELAY_RESP_WAITING_FOR_TIMESTAMP
+3 MDSyncReceive mdeth.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal,MDEntityGlobal \
+DISCARD,WAITING_FOR_FOLLOW_UP,WAITING_FOR_SYNC
+4 PortSyncSyncReceive mind.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal \
+DISCARD,RECEIVED_SYNC
+5 SiteSyncSync mind.h sm_temp.c D \
+PerTimeAwareSystemGlobal \
+INITIALIZING,RECEIVING_SYNC
+6 PortSyncSyncSend mind.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal \
+TRANSMIT_INIT,SEND_MD_SYNC,SYNC_RECEIPT_TIMEOUT
+7 MDSyncSend mdeth.h sm_temp.c DP \
+gptpnet_data_t,PerTimeAwareSystemGlobal,PerPortGlobal,MDEntityGlobal \
+INITIALIZING,SEND_SYNC_TWO_STEP,SEND_FOLLOW_UP,SEND_SYNC_ONE_STEP,SET_CORRECTION_FIELD
+8 ClockMasterSyncSend mind.h sm_temp.c D \
+PerTimeAwareSystemGlobal \
+INITIALIZING,SEND_SYNC_INDICATION
+9 PortAnnounceReceive mind.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal,BmcsPerTimeAwareSystemGlobal,BmcsPerPortGlobal \
+DISCARD,RECEIVE
+10 PortAnnounceInformation mind.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal,BmcsPerTimeAwareSystemGlobal,BmcsPerPortGlobal \
+DISABLED,AGED,UPDATE,CURRENT,RECEIVE,\
+SUPERIOR_MASTER_PORT,REPEATED_MASTER_PORT,INFERIOR_MASTER_OR_OTHER_PORT
+11 ClockSlaveSync mind.h sm_temp.c D \
+PerTimeAwareSystemGlobal \
+INITIALIZING,SEND_SYNC_INDICATION
+12 ClockMasterSyncReceive mind.h sm_temp.c D \
+PerTimeAwareSystemGlobal \
+INITIALIZING,WAITING,RECEIVE_SOURCE_TIME
+13 ClockMasterSyncOffset mind.h sm_temp.c D \
+PerTimeAwareSystemGlobal \
+INITIALIZING,SEND_SYNC_INDICATION
+14 gPtpCapableTransmit mind.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal \
+NOT_ENABLED,INITIALIZE,TRANSMIT_TLV
+15 gPtpCapableReceive mind.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal \
+NOT_ENABLED,INITIALIZE,RECEIVED_TLV
+16 SyncIntervalSetting mdeth.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal \
+NOT_ENABLED,INITIALIZE,SET_INTERVAL
+17 LinkDelayIntervalSetting mdeth.h sm_temp.c P \
+PerTimeAwareSystemGlobal,PerPortGlobal,MDEntityGlobal \
+NOT_ENABLED,INITIALIZE,SET_INTERVAL
+18 OneStepTxOperSetting mdeth.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal,MDEntityGlobal \
+NOT_ENABLED,INITIALIZE,SET_ONE_STEP_TX_OPER
+19 PortStateSelection mind.h sm_temp.c D \
+PerTimeAwareSystemGlobal,BmcsPerTimeAwareSystemGlobal \
+INIT_BRIDGE,STATE_SELECTION
+20 PortAnnounceInformationExt mind.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal,BmcsPerTimeAwareSystemGlobal,BmcsPerPortGlobal \
+INITIALIZE,RECEIVE
+21 PortStateSettingExt mind.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,BmcsPerTimeAwareSystemGlobal \
+INITIALIZE,STATE_SETTING
+22 PortAnnounceTransmit mind.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal,BmcsPerTimeAwareSystemGlobal,BmcsPerPortGlobal \
+TRANSMIT_INIT,TRANSMIT_PERIODIC,IDLE,TRANSMIT_ANNOUNCE
+23 AnnounceIntervalSetting mind.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal,BmcsPerPortGlobal \
+NOT_ENABLED,INITIALIZE,SET_INTERVALS
+24 MDAnnounceSend mdeth.h sm_temp.c DP \
+gptpnet_data_t,PerTimeAwareSystemGlobal,PerPortGlobal,BmcsPerPortGlobal \
+INITIALIZE,SEND_ANNOUNCE
+25 MDAnnounceReceive mdeth.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal \
+INITIALIZE,RECV_ANNOUNCE
+26 MDSignalingSend mdeth.h sm_temp.c DP \
+gptpnet_data_t,PerTimeAwareSystemGlobal,PerPortGlobal \
+INITIALIZE,SEND_SIGNALING
+27 MDSignalingReceive mdeth.h sm_temp.c DP \
+PerTimeAwareSystemGlobal,PerPortGlobal \
+INITIALIZE,RECV_SIGNALING
+28 GmStable mind.h sm_temp.c D \
+PerTimeAwareSystemGlobal \
+INITIALIZE,GM_LOST,GM_UNTABLE,GM_STABLE
+--- END ---
+//SiteSyncSync
+//PortSyncSyncReceive
+//ClockMasterSyncSend
+//ClockMasterSyncOffset
+//ClockMasterSyncReceive
+//PortSyncSyncSend
+//ClockSlaveSync
+//PortAnnounceReceive
+//PortAnnounceInformation
+//PortStateSelection
+//PortAnnounceInformationExt
+//PortStateSettingExt
+//PortAnnounceTransmit
+//AnnounceIntervalSetting
+//gPtpCapableTransmit
+//gPtpCapableReceive
+//MDSyncReceive
+//MDSyncSend
+//MDPdelayReq
+//MDPdelayResp
+//SyncIntervalSetting
+//LinkDelayIntervalSetting
+//OneStepTxOperSetting

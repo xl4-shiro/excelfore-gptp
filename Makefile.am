@@ -1,0 +1,4 @@
+PACKAGENAME=excelfore-gptp
+VERSION=1.0.0
+DESCRIPTION=Implementation of gPTP(IEEE 802.1AS)
+SUBDIRS = @BSUBDIRS@
