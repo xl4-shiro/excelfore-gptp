@@ -551,8 +551,10 @@ static int ipc_respond_one_clock(gptpnet_data_t *gpnetd,
 
 static int ipc_respond_one_gport(gptpnet_data_t *gpnetd,
 				 PerPortGlobal *ppglb, BmcsPerPortGlobal *bppglb,
+				 PerTimeAwareSystemGlobal *tasglb,
 				 BmcsPerTimeAwareSystemGlobal *btasglb,
-				 int portIndex, int domainNumber, int client_index)
+				 int portIndex, int domainNumber, int domainIndex,
+				 int client_index)
 {
 	gptpipc_gptpd_data_t pd;
 	memset(&pd, 0, sizeof(pd));
@@ -561,6 +563,8 @@ static int ipc_respond_one_gport(gptpnet_data_t *gpnetd,
 	pd.u.gportd.domainNumber=domainNumber;
 	pd.u.gportd.asCapable=ppglb->asCapable;
 	pd.u.gportd.portOper=ppglb->forAllDomain->portOper;
+	pd.u.gportd.selectedState=tasglb->selectedState[portIndex];
+	pd.u.gportd.gmStable=gptpclock_get_gmstable(domainIndex);
 	memcpy(&pd.u.gportd.gmClockId, btasglb->gmPriority.rootSystemIdentity.clockIdentity,
 	       sizeof(ClockIdentity));
 	pd.u.gportd.annPathSequenceCount=bppglb->annPathSequenceCount;
@@ -744,9 +748,10 @@ static int gptpnet_cb_ipc(gptpman_data_t *gpmand, event_data_ipc_t *ipcrd, uint6
 				gpmand->gpnetd,
 				gpmand->tasds[di].ptds[ipcrd->reqdata.portIndex].ppglb,
 				gpmand->tasds[di].ptds[ipcrd->reqdata.portIndex].bppglb,
+				gpmand->tasds[di].tasglb,
 				gpmand->tasds[di].btasglb,
 				ipcrd->reqdata.portIndex,
-				ipcrd->reqdata.domainNumber, ipcrd->client_index);
+				ipcrd->reqdata.domainNumber, di, ipcrd->client_index);
 		}
 		ppi=di;
 		for(di=0;di<gpmand->max_domains;di++){
@@ -757,8 +762,9 @@ static int gptpnet_cb_ipc(gptpman_data_t *gpmand, event_data_ipc_t *ipcrd, uint6
 					gpmand->gpnetd,
 					gpmand->tasds[di].ptds[pi].ppglb,
 					gpmand->tasds[di].ptds[pi].bppglb,
+					gpmand->tasds[di].tasglb,
 					gpmand->tasds[di].btasglb,
-					pi, gpmand->tasds[di].tasglb->domainNumber,
+					pi, gpmand->tasds[di].tasglb->domainNumber, di,
 					ipcrd->client_index);
 			}
 		}

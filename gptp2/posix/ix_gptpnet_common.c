@@ -87,7 +87,7 @@ static int read_ipc_event(gptpnet_data_t *gpnet)
 	address_length=sizeof(struct sockaddr_un);
 	res=recvfrom(gpnet->ipcfd, &edipc.reqdata, sizeof(gptpipc_client_req_data_t), 0,
 		     (struct sockaddr *) &(client_address),  &address_length);
-	if(res != sizeof(gptpipc_client_req_data_t)) {
+	if(res < 16) {
 		UB_LOG(UBL_INFO,"%s:wrong received size:%d\n",__func__, res);
 		return -1;
 	}

@@ -75,68 +75,76 @@ name_list = [
 """
 typedef struct gptpipc_client_req_data {
 	gptp_ipc_command_t cmd;
-	int domainNumber;
-	int domainIndex;
-	int portIndex;
-} gptpipc_client_req_data_t;
+	int32_t domainNumber;
+	int32_t domainIndex;
+	int32_t portIndex;
+} __attribute__((packed)) gptpipc_client_req_data_t;
 """
 REQ_DATA_FMT="=iiii"
 
 """
 typedef struct gptpipc_notice_data {
 	uint32_t event_flags;
-	int8_t domainNumber;
-	int domainIndex;
-	int portIndex;
+	int32_t domainNumber;
+	int32_t domainIndex;
+	int32_t portIndex;
 	UInteger224 gmPriority;
-} gptpipc_notice_data_t;
+	int64_t lastGmPhaseChange_nsec;
+	uint16_t gmTimeBaseIndicator;
+	uint8_t lastGmFreqChangePk[sizeof(double)];
+} __attribute__((packed)) gptpipc_notice_data_t;
 
 UInteger224 part is "BBBHB8BH8BHH"
 """
-NOTICE_DATA_FMT="=IbiiBBBHB8BH8BHH"
+NOTICE_DATA_FMT="=IiiiBBBHB8BH8BHH"
 
 """
 typedef struct gptpipc_data_netlink {
-	bool up;
-	char devname[IFNAMSIZ];
-	char ptpdev[MAX_PTPDEV_NAME];
 	uint32_t speed;
 	uint32_t duplex;
 	ClockIdentity portid;
-} gptpipc_data_netlink_t;
+	uint8_t up;
+	char devname[GPTPIPC_MAX_NETDEV_NAME];
+	char ptpdev[GPTPIPC_MAX_PTPDEV_NAME];
+} __attribute__((packed)) gptpipc_data_netlink_t;
+
 typedef struct gptpipc_ndport_data {
 	gptpipc_data_netlink_t nlstatus;
 } gptpipc_ndport_data_t;
 """
-NDPORT_DATA_FMT="=b16c32cII8B"
+NDPORT_DATA_FMT="=II8Bb16c32c"
 
 """
 typedef struct gptpipc_gport_data {
-	uint8_t domainNumber;
-	int portIndex;
-	bool asCapable;
-	bool portOper;
+	int32_t domainNumber;
+	int32_t portIndex;
 	ClockIdentity gmClockId;
+	uint8_t asCapable;
+	uint8_t portOper;
+	uint8_t gmStable;
+	uint8_t selectedState;
         uint8_t annPathSequenceCount;
 	ClockIdentity annPathSequence[MAX_PATH_TRACE_N];
-} gptpipc_gport_data_t;
+} __attribute__((packed)) gptpipc_gport_data_t;
+
 """
-GPORT_DATA_FMT="=Bibb8BB" # followed by '8B'*annPathSequenceCount
+GPORT_DATA_FMT="=ii8BBBBBB" # followed by '8B'*annPathSequenceCount
 
 """
 typedef struct gptpipc_clock_data{
-	bool gmsync;
-	uint8_t domainNumber;
-	int portIndex;
-	uint16_t gmTimeBaseIndicator;
+	int32_t domainNumber;
+	int32_t portIndex;
 	int64_t lastGmPhaseChange_nsec;
-	double lastGmFreqChange;
-	bool domainActive;
 	ClockIdentity clockId;
 	ClockIdentity gmClockId;
-} gptpipc_clock_data_t;
+	uint8_t gmsync;
+	uint8_t domainActive;
+	uint16_t gmTimeBaseIndicator;
+	uint8_t lastGmFreqChangePk[sizeof(double)];
+} __attribute__((packed)) gptpipc_clock_data_t;
+
 """
-CLOCK_DATA_FMT="=bBiHqdb8B8B"
+CLOCK_DATA_FMT="=iiqb8B8BBH"
 
 
 class ReadConfig(object):
@@ -196,7 +204,6 @@ class ListenIpcSocket(object):
         else:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.server_node=(self.udpaddr, self.udpport)
-
         try:
             self.sock.connect(self.server_node)
         except socket.error, msg:
@@ -363,6 +370,10 @@ class ListenIpcSocket(object):
     def decode_ndportd(self, rdata):
         fmt=NDPORT_DATA_FMT
         rd=list(struct.unpack(fmt, rdata[0:struct.calcsize(fmt)]))
+        speed=rd.pop(0)
+        duplex=rd.pop(0)
+        portid=rd[:8]
+        for i in range(8): rd.pop(0)
         dev_up=rd.pop(0)
         ndev="".join([rd.pop(0) for i in range(16)])
         n=ndev.find("\0")
@@ -370,9 +381,6 @@ class ListenIpcSocket(object):
         ptpdev="".join([rd.pop(0) for i in range(32)])
         n=ptpdev.find("\0")
         ptpdev=ptpdev[0:n]
-        speed=rd.pop(0)
-        duplex=rd.pop(0)
-        portid=rd[:8]
         print("%s, ndev=%s, ptpdev=%s, spped=%s, duplex=%s" % ("Up" if dev_up else "Down",
                                                                ndev, ptpdev, speed, duplex))
         print("  clockid=%s" % b8_hexstr(portid))
@@ -383,9 +391,11 @@ class ListenIpcSocket(object):
         rdata=rdata[struct.calcsize(fmt):-1]
         domainNumber=rd.pop(0)
         portIndex=rd.pop(0)
+        gmClockId=b8_hexstr([rd.pop(0) for i in range(8)])
         asCapable=rd.pop(0)
         portOper=rd.pop(0)
-        gmClockId=b8_hexstr([rd.pop(0) for i in range(8)])
+        gmStable=rd.pop(0)
+        selectedState=rd.pop(0)
         annPathSequenceCount=rd.pop(0)
         gmPathIds=[]
 
@@ -405,19 +415,18 @@ class ListenIpcSocket(object):
     def decode_clockd(self, rdata):
         fmt=CLOCK_DATA_FMT
         rd=list(struct.unpack(fmt, rdata[0:struct.calcsize(fmt)]))
-        gmsync=rd.pop(0)
         domainNumber=rd.pop(0)
         portIndex=rd.pop(0)
-        gmTimeBaseIndicator=rd.pop(0)
         lastGmPhaseChange_nsec=rd.pop(0)
-        lastGmFreqChange=rd.pop(0)
-        domainActive=rd.pop(0)
         clockId=b8_hexstr([rd.pop(0) for i in range(8)])
         gmClockId=b8_hexstr(rd)
+        gmsync=rd.pop(0)
+        domainActive=rd.pop(0)
+        gmTimeBaseIndicator=rd.pop(0)
         print("gmsync=%d, domainNumber=%d, active=%d, portIndex=%d, gmTimeBaseIndicator=%d" %
               (gmsync, domainNumber, domainActive, portIndex, gmTimeBaseIndicator))
-        print("  lastGmPhaseChange_nsec=%ld, lastGmFreqChange=%f, clockId=%s, gmClockId=%s" %
-              (lastGmPhaseChange_nsec, lastGmFreqChange, clockId, gmClockId))
+        print("  lastGmPhaseChange_nsec=%ld, clockId=%s, gmClockId=%s" %
+              (lastGmPhaseChange_nsec, clockId, gmClockId))
         _gpmon_scm.update_clockd(domainNumber, portIndex, clockId)
         _gpmon_scm.update_active_domain(domainNumber, domainActive)
 

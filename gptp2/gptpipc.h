@@ -94,12 +94,12 @@ typedef enum {
  */
 typedef struct gptpipc_notice_data {
 	uint32_t event_flags;
-	int8_t domainNumber;
-	int domainIndex;
-	int portIndex;
+	int32_t domainNumber;
+	int32_t domainIndex;
+	int32_t portIndex;
 	UInteger224 gmPriority;
-	uint16_t gmTimeBaseIndicator;
 	int64_t lastGmPhaseChange_nsec;
+	uint16_t gmTimeBaseIndicator;
 	uint8_t lastGmFreqChangePk[sizeof(double)];
 } __attribute__((packed)) gptpipc_notice_data_t;
 
@@ -135,11 +135,11 @@ typedef struct gptpipc_client_req_data {
 	gptp_ipc_command_t cmd;
 	// if domainNumber==-1, use domainIndex; if domainIndex==-1, use domainNumber
 	// if domainNumber==-1 and domainIndex==-1, all domains info is requested
-	int domainNumber;
-	int domainIndex;
+	int32_t domainNumber;
+	int32_t domainIndex;
 	// for ndprot, if portIndex=0, all ports info is requested. domain is always 0
 	// for gprot, if portIndex=0, all ports info for a specific domain or all domains
-	int portIndex;
+	int32_t portIndex;
 	union {
 		gptpipc_client_req_abnormal_t abnd;
 	};
@@ -157,12 +157,12 @@ typedef struct gptpipc_client_req_data {
 #define GPTPIPC_MAX_NETDEV_NAME 16
 #define GPTPIPC_MAX_PTPDEV_NAME 16
 typedef struct gptpipc_data_netlink {
-	bool up;
-	char devname[GPTPIPC_MAX_NETDEV_NAME];
-	char ptpdev[GPTPIPC_MAX_PTPDEV_NAME];
 	uint32_t speed;
 	uint32_t duplex;
 	ClockIdentity portid;
+	uint8_t up;
+	char devname[GPTPIPC_MAX_NETDEV_NAME];
+	char ptpdev[GPTPIPC_MAX_PTPDEV_NAME];
 } __attribute__((packed)) gptpipc_data_netlink_t;
 
 /**
@@ -190,11 +190,13 @@ typedef struct gptpipc_ndport_data {
  *  7. annPathSequence -> array of path sequence to grand master
  */
 typedef struct gptpipc_gport_data {
-	uint8_t domainNumber;
-	int portIndex;
-	bool asCapable;
-	bool portOper;
+	int32_t domainNumber;
+	int32_t portIndex;
 	ClockIdentity gmClockId;
+	uint8_t asCapable;
+	uint8_t portOper;
+	uint8_t gmStable;
+	uint8_t selectedState;
         uint8_t annPathSequenceCount;
 	ClockIdentity annPathSequence[MAX_PATH_TRACE_N];
 } __attribute__((packed)) gptpipc_gport_data_t;
@@ -212,19 +214,19 @@ typedef struct gptpipc_gport_data {
  *  9. gmClockId -> the clock identiy of the current grand master clock
  */
 typedef struct gptpipc_clock_data{
-	bool gmsync;
-	uint8_t domainNumber;
-	int portIndex;
-	uint16_t gmTimeBaseIndicator;
+	int32_t domainNumber;
+	int32_t portIndex;
 	int64_t lastGmPhaseChange_nsec;
-	uint8_t lastGmFreqChangePk[sizeof(double)];
-	bool domainActive;
 	ClockIdentity clockId;
 	ClockIdentity gmClockId;
+	uint8_t gmsync;
+	uint8_t domainActive;
+	uint16_t gmTimeBaseIndicator;
+	uint8_t lastGmFreqChangePk[sizeof(double)];
 } __attribute__((packed)) gptpipc_clock_data_t;
 
 typedef struct gptpipc_statistics_system{
-	int portIndex;
+	int32_t portIndex;
 	uint32_t pdelay_req_send;
 	uint32_t pdelay_resp_rec;
 	uint32_t pdelay_resp_rec_valid;
@@ -237,8 +239,8 @@ typedef struct gptpipc_statistics_system{
 } __attribute__((packed)) gptpipc_statistics_system_t;
 
 typedef struct gptpipc_statistics_tas{
-	int domainNumber;
-	int portIndex;
+	int32_t domainNumber;
+	int32_t portIndex;
 	uint32_t sync_send;
 	uint32_t sync_fup_send;
 	uint32_t sync_rec;

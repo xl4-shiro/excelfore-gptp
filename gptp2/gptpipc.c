@@ -27,6 +27,17 @@
 #include "gptpipc.h"
 #include "ll_gptpsupport.h"
 
+static char *selectedStateStr(uint8_t selectedState)
+{
+	switch(selectedState){
+	case DisabledPort: return "Disabled";
+	case MasterPort: return "Master";
+	case PassivePort: return "Passive";
+	case SlavePort: return "Slave";
+	default: return "Unknonw";
+	}
+}
+
 static void print_ipc_data(gptpipc_gptpd_data_t *rd)
 {
 	char *duplex="unknown";
@@ -95,14 +106,16 @@ static void print_ipc_data(gptpipc_gptpd_data_t *rd)
 		break;
 	case GPTPIPC_GPTPD_GPORTD:
 		printf("GPTPD_GPORTD ");
-		printf("domainNumber=%d portIndex=%d asCapable=%s ",
+		printf("domainNumber=%d portIndex=%d asCapable=%s gmStable=%s state=%s\n",
 		       rd->u.gportd.domainNumber, rd->u.gportd.portIndex,
-		       rd->u.gportd.asCapable?"True":"False");
+		       rd->u.gportd.asCapable?"True":"False",
+		       rd->u.gportd.gmStable?"True":"False",
+		       selectedStateStr(rd->u.gportd.selectedState));
 		if(!rd->u.gportd.asCapable){
 			printf("\n");
 			break;
 		}
-		printf("GM="UB_PRIhexB8"\n", UB_ARRAY_B8(rd->u.gportd.gmClockId));
+		printf("  GM="UB_PRIhexB8"\n", UB_ARRAY_B8(rd->u.gportd.gmClockId));
 		for(i=0;i<rd->u.gportd.annPathSequenceCount;i++){
 			if(i>=MAX_PATH_TRACE_N) break;
 			printf("  path trace %d: "UB_PRIhexB8"\n",

@@ -77,7 +77,8 @@ GPTP2_SOURCES = ll_gptpsupport.h \
 	md_abnormal_hooks.c md_abnormal_hooks.h
 
 bin_PROGRAMS = gptp2d gptpipcmon
-check_PROGRAMS = freqadj_unittest gptpcommon_unittest md_abnormal_hooks_unittest
+check_PROGRAMS = freqadj_unittest gptpcommon_unittest md_abnormal_hooks_unittest \
+	gptpmasterclock_response
 
 if LINUX_PTPCLOCK
   dist_bin_SCRIPTS = gptpipc_extscript
@@ -129,6 +130,10 @@ gptpipcmon_LDADD = -lpthread -lx4unibase -lx4combase
 md_abnormal_hooks_unittest_SOURCES =  md_abnormal_hooks_unittest.c $(GPTP2_SOURCES)
 md_abnormal_hooks_unittest_CFLAGS = $(AM_CFLAGS)
 md_abnormal_hooks_unittest_LDADD = -lpthread -lx4unibase -lx4combase -lcmocka
+gptpmasterclock_response_SOURCES = gptpmasterclock_response.c
+gptpmasterclock_response_CFLAGS = $(AM_CFLAGS)
+gptpmasterclock_response_LDADD =  libx4gptp2.la
+
 
 # public header for the library
 pkginclude_HEADERS = gptpbasetypes.h gptpmasterclock.h gptpipc.h

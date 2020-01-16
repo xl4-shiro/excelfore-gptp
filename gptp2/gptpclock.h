@@ -61,7 +61,7 @@ typedef struct gptp_master_clock_shm {
 
 #define GPTP_MAX_SIZE_SHARED_MEMNAME 32
 #define GPTP_MASTER_CLOCK_SHARED_MEM "/gptp_mc_shm"
-#define GPTP_MASTER_CLOCK_MUTEX_TIMEOUT (1*UB_MSEC_NS)
+#define GPTP_MASTER_CLOCK_MUTEX_TIMEOUT (10*UB_MSEC_NS)
 static inline int gptpclock_mutex_trylock(CB_THREAD_MUTEX_T *mutex)
 {
 	struct timespec mtots;
@@ -71,7 +71,8 @@ static inline int gptpclock_mutex_trylock(CB_THREAD_MUTEX_T *mutex)
 		UB_NSEC2TS(mtout, mtots);
 		if(CB_THREAD_MUTEX_TIMEDLOCK(mutex, &mtots)){
 			// the mutex is on hold such a long time; the holder must crash
-			UB_LOG(UBL_WARN, "%s:some gptp2d client must crash\n", __func__);
+			UB_LOG(UBL_WARN, "%s:the process is very slow,"
+			       " or some gptp2d client may crash\n", __func__);
 			return -1;
 		}
 	}
