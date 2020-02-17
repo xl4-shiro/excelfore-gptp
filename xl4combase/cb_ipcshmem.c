@@ -75,7 +75,8 @@ int cb_close_shared_mem(void *mem, int *memfd, const char *shmname, size_t size,
 	}
 	if(shmname && *shmname && (unlink)){
 		if(shm_unlink(shmname)){
-			UB_LOG(UBL_ERROR,"%s:shm_unlink, %s\n", __func__,strerror(errno));
+			UB_LOG(UBL_ERROR,"%s:shm_unlink, shmname=%s, %s\n",
+			       __func__, shmname, strerror(errno));
 			return -1;
 		}
 	}

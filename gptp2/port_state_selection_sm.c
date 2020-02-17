@@ -368,7 +368,8 @@ static void *init_bridge_proc(port_state_selection_data_t *sm, int64_t cts64)
 				SELECTED_STATE[i] = MasterPort;
 		}
 		sm->ptasg->gmPresent = true;
-		gptpclock_set_gmsync(0, sm->ptasg->domainNumber, (static_slave==0));
+		if(static_slave==0)
+			gptpclock_set_gmsync(0, sm->ptasg->domainNumber, true);
 		return NULL;
 	}
 	updateStateDisabledTree(sm);

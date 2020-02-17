@@ -28,6 +28,7 @@ create_config_file()
     let suffix_no=$1
     let priority=$2
     let rate=$3
+    let static_slave=$4
     let ovip_port=5018+${suffix_no}
     let ipc_port=${ovip_port}+500
     cat <<EOF  > gptp2_test${suffix_no}.conf
@@ -40,13 +41,14 @@ CONF_DEBUGLOG_MEMORY_FILE "gptp2d_debugmem${suffix_no}.log"
 CONF_TS2DIFF_CACHE_FACTOR 300
 CONF_DEBUGLOG_MEMORY_SIZE 1024
 CONF_LOG_GPTP_CAPABLE_MESSAGE_INTERVAL 1
+CONF_STATIC_PORT_STATE_SLAVE_PORT ${static_slave}
 EOF
 }
 
 start_gptp2d()
 {
-    create_config_file 0 246 $1
-    create_config_file 1 248 0
+    create_config_file 0 246 $1 -1
+    create_config_file 1 248 0 -1
     ./gptp2d -d cbeth0 -c gptp2_test0.conf &
     g1_pid=$!
     ./gptp2d -d cbeth1 -c gptp2_test1.conf &
@@ -99,12 +101,12 @@ multi_port_close()
 multi_port_test()
 {
     ppb=500000
-    create_config_file 0 246 $ppb
+    create_config_file 0 246 $ppb -1
     ./gptp2d -d cbeth0,cbeth1,cbeth2,cbeth3,cbeth4 -c gptp2_test0.conf &
     g0_pid=$!
     pn=5
     for i in {1,3,5,7,9}; do
-	create_config_file $i 248 0
+	create_config_file $i 248 0 -1
 	./gptp2d -d cbeth${pn} -c gptp2_test${i}.conf &
 	let g_pid[${i}]=$!
 	let pn=${pn}+1
@@ -148,7 +150,7 @@ multi_port_test()
 
 create_md_config_file()
 {
-    create_config_file $1 $2 $3
+    create_config_file $1 $2 $3 -1
     echo "CONF_MAX_DOMAIN_NUMBER 2" >> gptp2_test${1}.conf
     echo "CONF_SECOND_DOMAIN_THIS_CLOCK 1" >> gptp2_test${1}.conf
     echo "CONF_CMLDS_MODE 1" >> gptp2_test${1}.conf
@@ -211,9 +213,59 @@ multi_domain_test()
     multi_domain_close
 }
 
+static_config_test()
+{
+    create_config_file 0 246 0 0
+    create_config_file 1 248 0 1
+    ./gptp2d -d cbeth0 -c gptp2_test0.conf &
+    g1_pid=$!
+    ./gptp2d -d cbeth1 -c gptp2_test1.conf &
+    g2_pid=$!
+    pass_flag=true
+    echo "--- master ---"
+    if ./gptpipcmon -d 0 -u 5518 -a 127.0.0.1 -o | \
+	    grep "domainNumber=0 portIndex=0 GM_SYNC" > /dev/null; then
+	echo "Static Master immediately SYNC, PASS"
+    else
+	pass_flag=false
+    fi
+    echo "--- slave ---"
+    if ./gptpipcmon -d 0 -u 5519 -a 127.0.0.1 -o | \
+	    grep "domainNumber=0 portIndex=0 GM_UNSYNC" > /dev/null; then
+	echo "Static Slave initially Not SYNC, PASS"
+    else
+	pass_flag=false
+    fi
+    sleep 2
+    if ./gptpipcmon -d 0 -u 5519 -a 127.0.0.1 -o | \
+	    grep "domainNumber=0 portIndex=0 GM_SYNC" > /dev/null; then
+	echo "Static Slave SYNC in 2 sec, PASS"
+    else
+	pass_flag=false
+    fi
+    kill $g1_pid
+    sleep 2
+    if ./gptpipcmon -d 0 -u 5519 -a 127.0.0.1 -o | \
+	    grep "domainNumber=0 portIndex=0 GM_UNSYNC" > /dev/null; then
+	echo "Static Slave SYNC should be lost in 2 sec, PASS"
+    else
+	pass_flag=false
+    fi
+
+    if ${pass_flag}; then
+	echo "PASS: #### static Master/Slave config test ####"
+    fi
+    kill $g2_pid
+    if ! ${pass_flag}; then
+	echo "FAIL: #### static Master/Slave config test ####"
+	exit -1
+    fi
+}
+
 rate_move_test -300000
 rate_move_test 300000
 multi_port_test
 multi_domain_test
+static_config_test
 sleep 1
 exit 0

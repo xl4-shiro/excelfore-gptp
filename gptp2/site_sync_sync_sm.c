@@ -38,6 +38,7 @@ struct site_sync_sync_data{
 	SiteSyncSyncSM *thisSM;
 	int domainIndex;
 	PortSyncSync portSyncSync;
+	uint64_t site_sync_timeout;
 };
 
 #define RCVD_PSSYNC sm->thisSM->rcvdPSSync
@@ -78,17 +79,33 @@ static void *receiving_sync_proc(site_sync_sync_data_t *sm)
 	RCVD_PSSYNC = false;
 	memcpy(&sm->portSyncSync, RCVD_PSSYNC_PTR, sizeof(PortSyncSync));
 	PARENT_LOG_SYNC_INTERVAL = RCVD_PSSYNC_PTR->logMessageInterval;
+	sm->site_sync_timeout=RCVD_PSSYNC_PTR->syncReceiptTimeoutTime.nsec;
 	UB_LOG(UBL_DEBUGV,"%s:txPSSync\n", __func__);
 	return &sm->portSyncSync;
 }
 
-static site_sync_sync_state_t receiving_sync_condition(site_sync_sync_data_t *sm)
+static site_sync_sync_state_t receiving_sync_condition(site_sync_sync_data_t *sm,
+						       uint64_t cts64)
 {
 	if(RCVD_PSSYNC &&
 	   ((SELECTED_STATE[RCVD_PSSYNC_PTR->localPortIndex] == SlavePort &&
 	     GM_PRESENT)  || (gptpconf_get_intitem(CONF_TEST_SYNC_REC_PORT) ==
 						   RCVD_PSSYNC_PTR->localPortIndex)))
 		sm->last_state=REACTION;
+	if(sm->site_sync_timeout && (cts64 > sm->site_sync_timeout)){
+		sm->site_sync_timeout=0;
+		if(gptpconf_get_intitem(CONF_STATIC_PORT_STATE_SLAVE_PORT)>0){
+			/*
+			'static port config' and 'this is not GM'
+			syncReceiptTimeoutTime is not checked in port_announce_information_state
+			gmsync should be reset here for a quick response
+			*/
+			UB_LOG(UBL_DEBUGV,"%s:domainIndex=%d, site_sync_timeout\n",
+			       __func__, sm->domainIndex);
+			gptpclock_reset_gmsync(0, sm->domainIndex);
+			gptpclock_set_gmstable(sm->domainIndex, false);
+		}
+	}
 	return RECEIVING_SYNC;
 }
 
@@ -116,7 +133,7 @@ void *site_sync_sync_sm(site_sync_sync_data_t *sm, uint64_t cts64)
 		case RECEIVING_SYNC:
 			if(state_change)
 				retp=receiving_sync_proc(sm);
-			sm->state = receiving_sync_condition(sm);
+			sm->state = receiving_sync_condition(sm, cts64);
 			break;
 		case REACTION:
 			break;

@@ -944,6 +944,7 @@ static int gptpnet_cb(void *cb_data, int portIndex, gptpnet_event_t event,
 		}
 		break;
 	}
+	ub_log_flush();
 	if(res) return res;
 	ipc_clock_notice(gpmand);
 	return 0;

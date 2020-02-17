@@ -58,6 +58,11 @@ static void *initialize_proc(gm_stable_data_t *sm)
 	sm->gm_stable_time=0;
 	sm->gm_stable_timer_time=gptpconf_get_intitem(CONF_INITIAL_GM_STABLE_TIME)*1000000LL;
 	sm->ptasg->gm_stable_initdone=false;
+	if(sm->ptasg->selectedState[0]!=SlavePort){
+		// if this device is not GM, gmsync must be lost
+		gptpclock_reset_gmsync(0, sm->domainIndex);
+	}
+	gptpclock_set_gmstable(sm->domainIndex, false);
 	return NULL;
 }
 
