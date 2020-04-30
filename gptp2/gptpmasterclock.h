@@ -110,25 +110,5 @@ int gptpmasterclock_get_domain_ts64(int64_t *ts64, int domainIndex);
  */
 void gptpmasterclock_dump_offset(void);
 
-#ifdef GHINTEGRITY
-#include "ghintg/gh_gptpmasterclock.h"
-int gh_gptpmasterclock_setup_shm(void);
-extern Semaphore gptp2_time;
-#define GH_GPTP_SHM_TRY_UPDATE gh_gptpmasterclock_try_update();
-#define GH_GPTP_SHM_SETUP \
-	if( !GPTP2_SEM_NUM ) { \
-		MSGPRT(DM_ERROR,"%s: GPTP2_SEM_NUM is not defined. Refer IntegrationGuide.pdf\n",\
-		       __func__); \
-		return -1; \
-	} \
-	gptp2_time = SemaphoreObjectNumber(GPTP2_SEM_NUM); \
-	if( gh_gptpmasterclock_setup_shm() < 0 ) { \
-		MSGPRT(DM_ERROR,"%s: gh_gptpmasterclock_setup_shm() failed\n",__func__); \
-		return -1; \
-	}
-#else
-#define GH_GPTP_SHM_TRY_UPDATE
-#define GH_GPTP_SHM_SETUP
-#endif
 #endif
 /** @}*/

@@ -30,7 +30,7 @@
  */
 
 #ifndef __UB_CONFUTILS_H_
-#define __UB_CONFUTILS_H
+#define __UB_CONFUTILS_H_
 
 /**
  * @brief call back function which configures one configuration item indicated by

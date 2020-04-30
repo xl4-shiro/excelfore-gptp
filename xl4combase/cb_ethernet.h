@@ -37,15 +37,21 @@
  * And provide them in a header file defined as CB_SOCKET_NON_POSIX_H */
 #include CB_ETHERNET_NON_POSIX_H
 #else
+#include <unistd.h>
 #include <sys/socket.h>
-#include <netpacket/packet.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <net/if.h>
 #include <net/if_arp.h>
-#include <net/ethernet.h>
 #include <ifaddrs.h>
 #include <fcntl.h>
+
+#ifdef GHINTEGRITY
+#include "ghintg/cb_gh_specific.h"
+#else
+#include <netpacket/packet.h>
+#include <net/ethernet.h>
+#endif
 
 #define CB_SOCKET_T int
 #define CB_ETHHDR_T struct ethhdr

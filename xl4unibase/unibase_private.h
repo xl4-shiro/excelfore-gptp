@@ -48,6 +48,7 @@ typedef struct unibase_cstd {
 	bool threadding;
 	unibase_cb_set_t cbset;
 	ub_logmsg_data_t logmsgd[MAX_LOGMSG_CATEGORIES];
+	ub_logmsg_data_t logmsgd_ovrd;
 	int log_categories;
 	void *gmutex;
 } unibase_cstd_t;

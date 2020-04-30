@@ -31,6 +31,20 @@
 #ifndef __CB_THREAD_H_
 #define __CB_THREAD_H_
 
+/**
+ * @brief data structure for thread attributes
+ */
+#define CB_XL4_THREAD_NAME_SIZE 128
+
+/**
+ * @brief parameters to initialize thread
+ */
+typedef struct cb_xl4_thread_attr{
+	int pri;
+	int stack;
+	char name[CB_XL4_THREAD_NAME_SIZE];
+} cb_xl4_thread_attr_t;
+
 #ifdef CB_THREAD_NON_POSIX_H
 /* non-posix platforms need to support necessary POSIX compatible
  * functions and types which are defined as CB_* macros below.
@@ -73,20 +87,6 @@
 #define CB_SEM_POST sem_post
 #define CB_SEM_DESTROY sem_destroy
 #endif
-
-/**
- * @brief data structure for thread attributes
- */
-#define CB_XL4_THREAD_NAME_SIZE 128
-
-/**
- * @brief parameters to initialize thread
- */
-typedef struct cb_xl4_thread_attr{
-	int pri;
-	int stack;
-	char name[CB_XL4_THREAD_NAME_SIZE];
-} cb_xl4_thread_attr_t;
 
 static inline int cb_xl4_thread_attr_init(cb_xl4_thread_attr_t *attr, int pri,
 					  int stack, const char* name)

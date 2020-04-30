@@ -19,7 +19,7 @@
 # <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
 #
 PACKAGENAME=xl4gptp
-VERSION=1.0.0
+VERSION=1.0.1
 DESCRIPTION=Excelfore gptp daemon and libary
 
 ACLOCAL_AMFLAGS = -I m4
@@ -30,8 +30,10 @@ if BUILD_IN_STPL
 AM_CFLAGS += -I$(srcdir)/..
 AM_LDFLAGS = -L../xl4unibase/.libs -L../xl4combase/.libs
 UB_GENCONF = $(srcdir)/../xl4unibase/ub_genconf.py
+DOC_DIR = $(abs_srcdir)/../xl4unibase/doc
 else
 UB_GENCONF = $(datadir)/xl4unibase/ub_genconf.py
+DOC_DIR = $(datadir)/xl4unibase
 endif
 
 pkgincludedir=$(includedir)/xl4tsn/gptp2
@@ -163,11 +165,29 @@ deb:
 DOC_HTML_INDEX=$(srcdir)/docoutput/html/index.html
 DOC_LATEC_REFMAN=$(srcdir)/docoutput/latex/refman.pdf
 TARGET_PDF=$(srcdir)/docoutput/$(PACKAGENAME)_apis.pdf
+TEX_TEMPLATE = xl4_header_template.tex
 doc: $(TARGET_PDF)
+$(srcdir)/xl4_header.tex:
+	@tddir=$(DOC_DIR); \
+	if [ ! -f $${tddir}/$(TEX_TEMPLATE) ]; then \
+		tddir=$${tddir/\/usr/\/usr\/local}; \
+	fi; \
+	if [ ! -f $${tddir}/$(TEX_TEMPLATE) ]; then \
+		echo "$${tddir}/$(TEX_TEMPLATE) doesn't exist"; \
+		exit 1;\
+	fi; \
+	cp $${tddir}/$(TEX_TEMPLATE) $@; \
+	sed -i "s:EXCELFORE_LOGO_PNG:$${tddir}/excelfore_logo.png:" $@; \
+	sed -i "s:EXCELFORE_LOGO_L_PNG:$${tddir}/excelfore_logo_L.png:" $@
+	DOCDATE=`cd $(srcdir); git show -s --format=%ci HEAD | sed -r "s/(\S*).*/\1/"`; \
+	sed -i "s/XL4-DOCUMENT-DATE/$${DOCDATE}/" $@
+	sed -i "s/XL4-DOCUMENT-NAME/$(PACKAGENAME)/" $@
+	sed -i "s/XL4-DOCUMENT-VERSION/$(VERSION)/" $@
+
 $(TARGET_PDF): $(DOC_LATEC_REFMAN)
 	$(INSTALL_DATA) $^ $@
 
-$(DOC_LATEC_REFMAN): $(DOC_HTML_INDEX)
+$(DOC_LATEC_REFMAN): $(srcdir)/xl4_header.tex $(DOC_HTML_INDEX)
 	make -C $(srcdir)/docoutput/latex
 
 docoutput/html $(DOC_HTML_INDEX): $(pkginclude_HEADERS) README.md xl4gptp_doxygen.conf

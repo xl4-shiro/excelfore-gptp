@@ -301,7 +301,7 @@ static void test_waitpoint_broadcast(void **state){
 	CB_THREAD_T th[THREAD_COUNT];
         int i;
         for(i=0; i<THREAD_COUNT; i++){
-                CB_THREAD_CREATE(&th[i], &tattr, thread_wait_signal, &errors);
+                CB_THREAD_CREATE(&th[i], NULL, thread_wait_signal, &errors);
         }
         // ensure sequence
         while(errors!=THREAD_COUNT) nanosleep((const struct timespec[]){{0, 10000}}, NULL);

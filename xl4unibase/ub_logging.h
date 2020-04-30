@@ -88,7 +88,7 @@ typedef enum {
  * @brief override valuse 'x' to the value of the environment variable 'y'
  * @note UBB_GETENV must be defined before this macro is called.
  */
-#define UBL_OVERRIDE_ISTR(x,y) (UBB_GETENV(y)?UBB_GETENV(y):x)
+#define UBL_OVERRIDE_ISTR(x,y) ub_log_initstr_override(x,UBB_GETENV(y))
 
 #ifdef PRINT_FORMAT_NO_WARNING
 /** @brief some compilers don't have this type of attribute */
@@ -114,6 +114,18 @@ int ub_debug_print(const char * format, ...) PRINT_FORMAT_ATTRIBUTE1;
  * @brief output to the both of console out and debug out
  */
 int ub_console_debug_print(const char * format, ...) PRINT_FORMAT_ATTRIBUTE1;
+
+/**
+ * @brief override 'istr' of ub_log_inig
+ * @param ns	original 'istr'
+ * @param os	overriding string
+ * @return 'ns' or 'os'
+ * @note if 'os' includes ',', the entire 'os' is returned and it overrides the entire 'istr'
+ * 	if 'os' one module of 'ns' like 'mod1:55m', 'mod1' part is overridden by 'os'
+ *	e.g. when ns="4,mod0:44,mod1:44", os="mod1:55m"
+ *	ub_log_init(ub_log_initstr_override(ns, os)) is initialized by "4,mod0:44,mod1:55m"
+ */
+const char *ub_log_initstr_override(const char *ns, const char *os);
 
 /**
  * @brief initialize logging by a string

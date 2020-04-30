@@ -48,6 +48,25 @@
 #include "ub_llist.h"
 #include "ub_confutils.h"
 
+
+#ifndef CLOCK_MONOTONIC
+#define CLOCK_MONOTONIC CLOCK_REALTIME
+#endif
+
+#ifdef NO_GETOPT_LONG
+struct option
+{
+	char *name;
+	int has_arg;
+	int *flag;
+	int val;
+};
+#define no_argument			0
+#define required_argument	1
+#define optional_argument	2
+#define getopt_long(argc,argv,opstr,lo,li) getopt(argc,argv,opstr)
+#endif
+
 #define UB_UNIBASE_LOGCAT 0
 /************************************************************
  * type declarations

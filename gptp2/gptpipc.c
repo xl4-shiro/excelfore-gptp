@@ -24,8 +24,8 @@
 #include <errno.h>
 #include "gptpbasetypes.h"
 #include "gptp_defaults.h"
-#include "gptpipc.h"
 #include "ll_gptpsupport.h"
+#include "gptpipc.h"
 
 static char *selectedStateStr(uint8_t selectedState)
 {

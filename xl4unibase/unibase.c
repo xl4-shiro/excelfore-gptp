@@ -43,6 +43,10 @@ unibase_cstd_t ubcd = {false,};
 
 void unibase_init(unibase_init_para_t *ub_init_para)
 {
+	if(!ub_init_para) {
+		printf("need 'ub_init_para'\n");
+		abort();
+	}
 	if(ubcd.locked) return;
 	memcpy(&ubcd.cbset, &ub_init_para->cbset, sizeof(unibase_cb_set_t));
 	if(ubcd.cbset.mutex_init && ubcd.cbset.mutex_close &&

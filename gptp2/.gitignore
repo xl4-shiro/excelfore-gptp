@@ -2,6 +2,9 @@
 *~
 *.log
 *.pyc
+*.swp
+*.swo
+*.swn
 Makefile.in
 m4/
 AUTHORS
@@ -41,3 +44,5 @@ xl4gptp_*.build
 xl4gptp_*.buildinfo
 xl4gptp_*.changes
 xl4gptp_*.deb
+xl4_header.tex
+gh_gptpmasterclock.h

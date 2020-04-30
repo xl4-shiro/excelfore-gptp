@@ -303,7 +303,7 @@ def set_options():
         print str(err)  # will print something like "option -a not recognized"
         print_usage()
         sys.exit(1)
-    res={'input':None, 'prefix':None, 'exth':None}
+    res={'input':None, 'prefix':None, 'exth':None, 'cfile':None, 'hfile':None, 'vfile':None}
     for o, a in opts:
         if o in ("-h", "--help"):
             print_usage()
@@ -332,6 +332,10 @@ if __name__ == "__main__":
     options=set_options()
     pf=options['prefix']
     dh=DefaultHeader(fname=options['input'])
+
+    if not options['hfile'] and options['cfile']:
+        options['hfile']=options['cfile'][:-1]+"h"
+
     if options['hfile']:
         outf=open(options['hfile'], "w")
         print_header_file_head(outf, pf, options['exth'])
@@ -346,7 +350,6 @@ if __name__ == "__main__":
         print_header_file_foot(outf)
         outf.close()
 
-    if not options['hfile']: options['hfile']=options['cfile'][:-1]+"h"
     if options['vfile']:
         outf=open(options['vfile'], "w")
         print_unittest_head(outf, pf, options['input'], options['hfile'])

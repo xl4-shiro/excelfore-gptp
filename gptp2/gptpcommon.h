@@ -28,6 +28,7 @@
  *  plaform specific definitions
  ****************************************/
 #if defined(GHINTEGRITY)
+extern int gptpClockShmUpdateFlag;
 #define GH_SET_GPTP_SHM     gptpClockShmUpdateFlag=1
 #define GH_UNSET_GPTP_SHM   gptpClockShmUpdateFlag=0
 #define IS_GPTP_SHM_SET     (gptpClockShmUpdateFlag==1)

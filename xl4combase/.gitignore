@@ -2,6 +2,9 @@
 *~
 *.log
 *.pyc
+*.swp
+*.swo
+*.swn
 Makefile.in
 m4/
 AUTHORS
@@ -36,3 +39,4 @@ xl4combase_*.changes
 xl4combase_*.deb
 debian.make
 py-compile
+xl4_header.tex

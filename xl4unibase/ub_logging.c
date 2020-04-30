@@ -140,6 +140,20 @@ static int log_one_category(const char *ns, ub_logmsg_data_t *logmsgd, char *cat
 	return ns-nss;
 }
 
+const char *ub_log_initstr_override(const char *ns, const char *os)
+{
+	int v;
+
+	memset(&ubcd.logmsgd_ovrd, 0, sizeof(ub_logmsg_data_t));
+	if(!os) return ns;
+	if(strchr(os, ',')) return os;
+	v=log_one_category(os, &ubcd.logmsgd_ovrd, NULL);
+	if(v<strlen(os)){
+		printf("invalid format of override string=%s\n", os);
+	}
+	return ns;
+}
+
 void ub_log_init(const char *ns)
 {
 	int i,v;
@@ -176,6 +190,11 @@ void ub_log_init(const char *ns)
 		}
 		v=log_one_category(ns, &ubcd.logmsgd[cat_index], NULL);
 		if(v<0) continue;
+		if(!strcmp(ubcd.logmsgd_ovrd.category_name,
+			   ubcd.logmsgd[cat_index].category_name)){
+			memcpy(&ubcd.logmsgd[cat_index], &ubcd.logmsgd_ovrd,
+			       sizeof(ub_logmsg_data_t));
+		}
 		ns+=v;
 		cat_index++;
 		ubcd.log_categories++;

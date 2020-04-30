@@ -167,6 +167,103 @@ static int setup(void **state)
 	return 0;
 }
 
+typedef struct envstrd{
+	int llevel;
+	char *modname;
+} envstrd_t;
+
+static int setup_env1(void **state)
+{
+	unibase_init_para_t init_para;
+	static envstrd_t envsd;
+
+	ubb_default_initpara(&init_para);
+	init_para.ub_log_initstr=UBL_OVERRIDE_ISTR("4,ubase:44,mod1:44,mod2:44,mod3:44",
+						   "UBL_LOGTEST");
+	unibase_init(&init_para);
+	ubb_memory_out_init(memoutbuf, sizeof(memoutbuf)-1);
+	envsd.llevel=UBL_INFO;
+	envsd.modname="mod3";
+	*state=&envsd;
+	return 0;
+}
+
+static int setup_env2(void **state)
+{
+	static envstrd_t envsd;
+	setenv("UBL_LOGTEST", "4,ubase:44,mod1:44,mod2:44,mod3:46", 1);
+	setup_env1(state);
+	envsd.llevel=UBL_DEBUG;
+	envsd.modname="mod3";
+	*state=&envsd;
+	return 0;
+}
+
+static int setup_env3(void **state)
+{
+	static envstrd_t envsd;
+	setenv("UBL_LOGTEST", "mod3:46", 1);
+	setup_env1(state);
+	envsd.llevel=UBL_DEBUG;
+	envsd.modname="mod3";
+	*state=&envsd;
+	return 0;
+}
+
+static int setup_env4(void **state)
+{
+	static envstrd_t envsd;
+	setenv("UBL_LOGTEST", "mod2:46", 1);
+	setup_env1(state);
+	envsd.llevel=UBL_DEBUG;
+	envsd.modname="mod2";
+	*state=&envsd;
+	return 0;
+}
+
+#undef UB_LOGCAT
+#define UB_LOGCAT 2
+static int test_ub_log2(int llevel, int pnum)
+{
+	return UB_LOG(llevel, "%d\n", pnum);
+}
+
+#undef UB_LOGCAT
+#define UB_LOGCAT 3
+static int test_ub_log3(int llevel, int pnum)
+{
+	return UB_LOG(llevel, "%d\n", pnum);
+}
+
+static void test_ub_log_env_cat(void **state)
+{
+	char pstr[64], qstr[64];
+	int v;
+	int pnum=100;
+	envstrd_t *envsd=(envstrd_t *)*state;
+
+	sprintf(pstr, "%s:%s:%d\n", level_mark[UBL_INFO], envsd->modname, pnum);
+	sprintf(qstr, "%s%s", pstr, endmark);
+	v=strlen(pstr);
+	if(!strcmp(envsd->modname,"mod2"))
+		test_ub_log2(UBL_INFO, pnum);
+	else
+		test_ub_log3(UBL_INFO, pnum);
+	assert_string_equal(qstr, memoutbuf);
+
+	sprintf(pstr, "%s:%s:%d\n", level_mark[UBL_DEBUG], envsd->modname, pnum);
+	sprintf(qstr, "%s%s", pstr, endmark);
+	if(!strcmp(envsd->modname,"mod2"))
+		test_ub_log2(UBL_DEBUG, pnum);
+	else
+		test_ub_log3(UBL_DEBUG, pnum);
+	if(envsd->llevel==UBL_INFO){
+		assert_string_equal(endmark, memoutbuf+v);
+	}else{
+		assert_string_equal(qstr, memoutbuf+v);
+	}
+}
+
 static int teardown(void **state)
 {
 	ubb_memory_out_close();
@@ -182,6 +279,14 @@ int main(int argc, char *argv[])
 		cmocka_unit_test_prestate_setup_teardown(test_ub_log_memout_thread, setup,
 							 teardown, NULL),
 		cmocka_unit_test_prestate_setup_teardown(test_ub_log_memout_all, setup,
+							 teardown, NULL),
+		cmocka_unit_test_prestate_setup_teardown(test_ub_log_env_cat, setup_env1,
+							 teardown, NULL),
+		cmocka_unit_test_prestate_setup_teardown(test_ub_log_env_cat, setup_env2,
+							 teardown, NULL),
+		cmocka_unit_test_prestate_setup_teardown(test_ub_log_env_cat, setup_env3,
+							 teardown, NULL),
+		cmocka_unit_test_prestate_setup_teardown(test_ub_log_env_cat, setup_env4,
 							 teardown, NULL),
 	};
 

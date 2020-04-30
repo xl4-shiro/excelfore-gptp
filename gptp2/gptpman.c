@@ -692,8 +692,8 @@ static int ipc_register_abnormal_event(event_data_ipc_t *ipcrd)
 	memset(&aevent,0,sizeof(aevent));
 	aevent.domainNumber=ipcrd->reqdata.domainNumber;
 	aevent.ndevIndex=ipcrd->reqdata.portIndex-1;
-	aevent.msgtype=ipcrd->reqdata.abnd.msgtype;
-	aevent.eventtype=ipcrd->reqdata.abnd.eventtype;
+	aevent.msgtype=(PTPMsgType)ipcrd->reqdata.abnd.msgtype;
+	aevent.eventtype=(md_abn_event_type)ipcrd->reqdata.abnd.eventtype;
 	aevent.eventrate=ipcrd->reqdata.abnd.eventrate;
 	aevent.repeat=ipcrd->reqdata.abnd.repeat;
 	aevent.interval=ipcrd->reqdata.abnd.interval;

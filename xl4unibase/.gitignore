@@ -1,6 +1,9 @@
 *.[oa]
 *~
 *.log
+*.swp
+*.swo
+*.swn
 Makefile.in
 m4/
 AUTHORS
@@ -33,3 +36,6 @@ xl4unibase_*.build
 xl4unibase_*.buildinfo
 xl4unibase_*.changes
 xl4unibase_*.deb
+ubconftest_conf.*
+ubconftest_values.*
+xl4_header.tex

@@ -68,7 +68,7 @@ int cb_sockaddr_to_ipaddr(const CB_SOCKADDR_T *sa, CB_SOCKLEN_T salen, char *ip,
         CB_ADDRINFO_AI_ADDRLEN(&ai) = salen;
         CB_ADDRINFO_AI_FAMILY(&ai) = CB_SOCKADDR_SA_FAMILY(sa);
         return cb_addrinfo_to_ipaddr(&ai, ip, ip_size, port);
-};
+}
 
 bool cb_is_multicast_addr(const CB_SOCKADDR_T *addr){
         switch(CB_SOCKADDR_SA_FAMILY(addr)){
@@ -79,4 +79,4 @@ bool cb_is_multicast_addr(const CB_SOCKADDR_T *addr){
         default:
                 return false;
         }
-};
+}

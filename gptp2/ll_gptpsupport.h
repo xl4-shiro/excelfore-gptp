@@ -31,13 +31,24 @@ static inline int _zero_return(void){return 0;}
 #define PTPDEV_CLOCK_CLOSE(x) (x==GPTP_VIRTUAL_PTPDEV_FDBASE)?_zero_return():close(x)
 #define PTPFD_TYPE int
 #define PTPFD_VALID(ptpfd) (ptpfd>0)
+
+#elif defined(GHINTEGRITY)
+/* Green Hills INTEGRITY definitions */
+#include <unistd.h>
+#include "xl4combase/combase.h"
+#include "ghintg/gh_ptpclock.h"
+#define PTPFD_TYPE void*
+#define PTPFD_VALID(ptpfd) (ptpfd!=NULL)
+#define PTPDEV_CLOCK_OPEN(x,y) gh_ptpclock_open(x,y)
+#define PTPDEV_CLOCK_CLOSE(x)  gh_ptpclock_close(x)
+
 #endif
 
 #ifndef MAIN_RETURN
 #define MAIN_RETURN(x) return x
 #endif
 
-#if (defined(LINUX_PTPCLOCK) && !defined(SJA1105)) || defined(GHINTEGRITY)
+#if (defined(LINUX_PTPCLOCK) && !defined(SJA1105))
 #define GPTP_CLOCK_GETTIME(x,y) {					\
 	if(x<GPTP_VIRTUAL_PTPDEV_FDBASE || x>GPTP_VIRTUAL_PTPDEV_FDMAX){ \
 		struct timespec ts;					\
@@ -71,6 +82,39 @@ extern int gptp_clock_gettime(int fd, int64_t *ts);
 extern int gptp_clock_settime(int fd, const int64_t *ts);
 #define GPTP_CLOCK_GETTIME(x,y) gptp_clock_gettime(x,&y)
 #define GPTP_CLOCK_SETTIME(x,y) gptp_clock_settime(x,&y)
+
+#elif defined(GHINTEGRITY)
+/* Green Hills INTEGRITY definitions */
+#define GPTP_CLOCK_GETTIME(x,y) { \
+	if((uint64_t)x<GPTP_VIRTUAL_PTPDEV_FDBASE || (uint64_t)x>GPTP_VIRTUAL_PTPDEV_FDMAX){ \
+		struct timespec ts;			\
+		gh_ptpclock_gettime(x,&ts); \
+		y=UB_TS2NSEC(ts);			\
+	}else{							\
+		y=gptpclock_gettime_ptpvfd((uint64_t)x);	\
+	}								\
+	}
+
+#define GPTP_CLOCK_SETTIME(x,y) { \
+	if((uint64_t)x<GPTP_VIRTUAL_PTPDEV_FDBASE || (uint64_t)x>GPTP_VIRTUAL_PTPDEV_FDMAX){ \
+		struct timespec ts;		\
+		UB_NSEC2TS(y,ts);		\
+		gh_ptpclock_settime(x,&ts);					\
+	}else{											\
+		gptpclock_settime_ptpvfd((uint64_t)x, y);	\
+	}								\
+	}
+
+#define GPTP_CLOCK_GETTIMEMS(x,y) { \
+	if((uint64_t)x<GPTP_VIRTUAL_PTPDEV_FDBASE || (uint64_t)x>GPTP_VIRTUAL_PTPDEV_FDMAX){ \
+		struct timespec ts;			\
+		gh_ptpclock_gettime(x,&ts); \
+		y=UB_TS2NSEC(ts);			\
+	}else{							\
+		y=ub_rt_gettime64();		\
+	}								\
+	}
+
 #else
 extern int gptp_clock_gettime(int fd, struct timespec *ts);
 extern int gptp_clock_settime(int fd, const struct timespec *ts);

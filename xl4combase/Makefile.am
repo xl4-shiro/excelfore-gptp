@@ -19,7 +19,7 @@
 # <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
 #
 PACKAGENAME=xl4combase
-VERSION=1.0.0
+VERSION=1.0.1
 DESCRIPTION=Excelfore communication base library
 lib_LTLIBRARIES = libx4combase.la
 libx4combase_la_SOURCES = combase.h
@@ -35,6 +35,9 @@ AM_CFLAGS = -Wall -Wno-unused-result \
 if BUILD_IN_STPL
 AM_CFLAGS += -I$(srcdir)/..
 AM_LDFLAGS = -L../xl4unibase/.libs
+DOC_DIR = $(abs_srcdir)/../xl4unibase/doc
+else
+DOC_DIR = $(datadir)/xl4unibase
 endif
 
 if POSIX_PLATFORM
@@ -115,11 +118,29 @@ TESTS = $(check_PROGRAMS)
 DOC_HTML_INDEX=$(srcdir)/docoutput/html/index.html
 DOC_LATEC_REFMAN=$(srcdir)/docoutput/latex/refman.pdf
 TARGET_PDF=$(srcdir)/docoutput/combase_apis.pdf
+TEX_TEMPLATE = xl4_header_template.tex
 doc: $(TARGET_PDF)
+$(srcdir)/xl4_header.tex:
+	@tddir=$(DOC_DIR); \
+	if [ ! -f $${tddir}/$(TEX_TEMPLATE) ]; then \
+		tddir=$${tddir/\/usr/\/usr\/local}; \
+	fi; \
+	if [ ! -f $${tddir}/$(TEX_TEMPLATE) ]; then \
+		echo "$${tddir}/$(TEX_TEMPLATE) doesn't exist"; \
+		exit 1;\
+	fi; \
+	cp $${tddir}/$(TEX_TEMPLATE) $@; \
+	sed -i "s:EXCELFORE_LOGO_PNG:$${tddir}/excelfore_logo.png:" $@; \
+	sed -i "s:EXCELFORE_LOGO_L_PNG:$${tddir}/excelfore_logo_L.png:" $@
+	DOCDATE=`cd $(srcdir); git show -s --format=%ci HEAD | sed -r "s/(\S*).*/\1/"`; \
+	sed -i "s/XL4-DOCUMENT-DATE/$${DOCDATE}/" $@
+	sed -i "s/XL4-DOCUMENT-NAME/$(PACKAGENAME)/" $@
+	sed -i "s/XL4-DOCUMENT-VERSION/$(VERSION)/" $@
+
 $(TARGET_PDF): $(DOC_LATEC_REFMAN)
 	$(INSTALL_DATA) $^ $@
 
-$(DOC_LATEC_REFMAN): $(DOC_HTML_INDEX)
+$(DOC_LATEC_REFMAN): $(srcdir)/xl4_header.tex $(DOC_HTML_INDEX)
 	make -C $(srcdir)/docoutput/latex
 
 docoutput/html $(DOC_HTML_INDEX): $(pkginclude_HEADERS) README.md

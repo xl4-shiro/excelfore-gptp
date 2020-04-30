@@ -1,0 +1,196 @@
+% Latex header for doxygen 1.8.10
+\documentclass[oneside]{book}
+
+% Packages required by doxygen
+\usepackage{fixltx2e}
+\usepackage{calc}
+\usepackage{doxygen}
+\usepackage[export]{adjustbox} % also loads graphicx
+\usepackage{graphicx}
+\usepackage[utf8]{inputenc}
+\usepackage{makeidx}
+\usepackage{multicol}
+\usepackage{multirow}
+\PassOptionsToPackage{warn}{textcomp}
+\usepackage{textcomp}
+\usepackage[nointegrals]{wasysym}
+\usepackage[table]{xcolor}
+
+% Font selection
+\usepackage[T1]{fontenc}
+\usepackage[scaled=.90]{helvet}
+\usepackage{courier}
+\usepackage{amssymb}
+\usepackage{sectsty}
+\renewcommand{\familydefault}{\sfdefault}
+\allsectionsfont{%
+  \fontseries{bc}\selectfont%
+  \color{darkgray}%
+}
+\renewcommand{\DoxyLabelFont}{%
+  \fontseries{bc}\selectfont%
+  \color{darkgray}%
+}
+\newcommand{\+}{\discretionary{\mbox{\scriptsize$\hookleftarrow$}}{}{}}
+
+% Page & text layout
+\usepackage{geometry}
+\geometry{
+  a4paper,
+  top=1.5cm,
+  bottom=1.5cm,
+  left=1.5cm,
+  right=1.5cm,
+  headheight=3ex,
+  headsep=2ex
+}
+\tolerance=750
+\hfuzz=15pt
+\hbadness=750
+\setlength{\emergencystretch}{15pt}
+\setlength{\parindent}{0cm}
+\setlength{\parskip}{0.2cm}
+\makeatletter
+\renewcommand{\paragraph}{%
+  \@startsection{paragraph}{4}{0ex}{-1.0ex}{1.0ex}{%
+    \normalfont\normalsize\bfseries\SS@parafont%
+  }%
+}
+\renewcommand{\subparagraph}{%
+  \@startsection{subparagraph}{5}{0ex}{-1.0ex}{1.0ex}{%
+    \normalfont\normalsize\bfseries\SS@subparafont%
+  }%
+}
+\makeatother
+
+% Headers & footers
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+% overwrite plain style used for chapter pages
+\fancypagestyle{plain}{
+ \fancyhf{}
+ \fancyhead[R]{
+   {\includegraphics[width=2.4cm]{EXCELFORE_LOGO_PNG}}}
+ \fancyfoot[L]{
+   {\bfseries\scriptsize  XL4-DOCUMENT-NAME  vXL4-DOCUMENT-VERSION, Excelfore Confidential}}
+ \fancyfoot[R]{\bfseries\scriptsize \thepage\ / \pageref{LastPage}}
+ \renewcommand{\footrulewidth}{0.4pt}
+ \renewcommand{\headrulewidth}{0.4pt}
+}
+% overwrite fancyplain style used for non-chapter pages
+\fancypagestyle{fancyplain}{
+ \fancyhf{}
+ \fancyhead[R]{
+   {\includegraphics[width=2.4cm]{EXCELFORE_LOGO_PNG}}}
+ \fancyfoot[L]{
+   {\bfseries\scriptsize  XL4-DOCUMENT-NAME  vXL4-DOCUMENT-VERSION, Excelfore Confidential}}
+ \fancyfoot[R]{\bfseries\scriptsize \thepage\ / \pageref{LastPage}}
+ \renewcommand{\footrulewidth}{0.4pt}
+ \renewcommand{\headrulewidth}{0.4pt}
+}
+\pagestyle{fancyplain}
+
+% Indices & bibliography
+\usepackage{natbib}
+\usepackage[titles]{tocloft}
+\setcounter{tocdepth}{3}
+\setcounter{secnumdepth}{5}
+\makeindex
+
+% Title and section
+\usepackage{titlesec}
+\titleformat{\chapter}[block]
+ {\fontsize{15}{15}\bfseries\sffamily}
+ {\thechapter}
+ {1em}
+ {\MakeUppercase}
+\titleformat{\section}[block]
+ {\fontsize{12}{15}\bfseries\sffamily}
+ {\thesection}
+ {1em}
+ {\MakeUppercase}
+\titleformat{\subsection}[hang]
+ {\fontsize{12}{15}\bfseries\sffamily}
+ {\thesubsection}
+ {1em}
+ {}
+\titlespacing\chapter{0pt}{12pt plus 4pt minus 2pt}{0pt plus 2pt minus 2pt}
+\titlespacing\section{0pt}{12pt plus 4pt minus 2pt}{0pt plus 2pt minus 2pt}
+\titlespacing\subsection{0pt}{12pt plus 4pt minus 2pt}{0pt plus 2pt minus 2pt}
+\titlespacing\subsubsection{0pt}{12pt plus 4pt minus 2pt}{0pt plus 2pt minus 2pt}
+
+\usepackage{indentfirst}
+
+% Hyperlinks (required, but should be loaded last)
+\usepackage{ifpdf}
+\ifpdf
+  \usepackage[pdftex,pagebackref=true]{hyperref}
+\else
+  \usepackage[ps2pdf,pagebackref=true]{hyperref}
+\fi
+\hypersetup{%
+  colorlinks=true,%
+  linkcolor=blue,%
+  citecolor=blue,%
+  unicode%
+}
+
+% Custom commands
+\newcommand{\clearemptydoublepage}{%
+  \newpage{\pagestyle{empty}\cleardoublepage}%
+}
+
+
+%===== C O N T E N T S =====
+
+\begin{document}
+
+% Titlepage & ToC
+\renewcommand{\contentsname}{Table of Contents}
+\hypersetup{pageanchor=false,
+             bookmarks=true,
+             bookmarksnumbered=true,
+             pdfencoding=unicode
+            }
+\pagenumbering{roman}
+\begin{titlepage}
+\vspace*{7cm}
+\begin{center}%
+{\LARGE XL4-DOCUMENT-NAME}\\
+\vspace*{1cm}
+{\normalsize Ver. XL4-DOCUMENT-VERSION}\\
+{\normalsize XL4-DOCUMENT-DATE}\\
+\vspace*{5cm}
+{\includegraphics[width=13cm]{EXCELFORE_LOGO_L_PNG}}\\
+\vspace*{2cm}
+\end{center}
+\begin{multicols}{2}
+\begin{center}%
+{\normalsize Excelfore Corporation}\\
+\vspace*{0.2cm}
+{\normalsize 3155 Kearney Street}\\
+\vspace*{0.2cm}
+{\normalsize Fremont, California 94538 USA}\\
+\end{center}
+\columnbreak
+\begin{center}%
+{\normalsize Excelfore Japan K.K.}\\
+\vspace*{0.2cm}
+{\normalsize 1-45-10-4A Matsubara, Setagaya-ku}\\
+\vspace*{0.2cm}
+{\normalsize Tokyo, Japan 156-0043}\\
+\end{center}
+\end{multicols}
+\end{titlepage}
+\clearemptydoublepage
+\tableofcontents
+\begingroup
+\let\clearpage\relax
+\listoffigures
+\listoftables
+\endgroup
+\clearemptydoublepage
+\pagenumbering{arabic}
+\hypersetup{pageanchor=true}
+
+%--- Begin generated contents ---

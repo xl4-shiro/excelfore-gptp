@@ -24,9 +24,9 @@
 #include <unistd.h>
 #include "combase_private.h"
 
-static int ovip_socket_open(CB_SOCKET_T *sfd, cb_rawsock_ovip_para_t *ovipp)
+static int ovip_socket_open(CB_SOCKET_T *sfd, CB_SOCKADDR_IN_T *saddr,
+			    cb_rawsock_ovip_para_t *ovipp)
 {
-	CB_SOCKADDR_IN_T saddr;
 	int optval;
 
 	*sfd = CB_SOCKET(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -34,25 +34,25 @@ static int ovip_socket_open(CB_SOCKET_T *sfd, cb_rawsock_ovip_para_t *ovipp)
 		UB_LOG(UBL_ERROR,"%s: %s\n",__func__, strerror(errno));
 		return -1;
 	}
-	memset(&saddr, 0, sizeof(saddr));
-	saddr.sin_addr.s_addr = htonl(ovipp->laddr);
-	saddr.sin_family = AF_INET;
-	saddr.sin_port = htons(ovipp->lport);
+	memset(saddr, 0, sizeof(CB_SOCKADDR_IN_T));
+	saddr->sin_addr.s_addr = htonl(ovipp->laddr);
+	saddr->sin_family = AF_INET;
+	saddr->sin_port = htons(ovipp->lport);
 	optval=1;
 	CB_SETSOCKOPT(*sfd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
 
-        if (CB_SOCK_BIND(*sfd, (struct sockaddr *)&saddr, sizeof(saddr)) < 0) {
+        if (CB_SOCK_BIND(*sfd, (struct sockaddr *)saddr, sizeof(CB_SOCKADDR_IN_T)) < 0) {
 		UB_LOG(UBL_ERROR,"%s: %s, port=%d\n",__func__, strerror(errno), ovipp->lport);
 		CB_SOCK_CLOSE(*sfd);
 		return -1;
         }
 
 	if(ovipp->daddr){
-		memset(&saddr, 0, sizeof(saddr));
-		saddr.sin_addr.s_addr = htonl(ovipp->daddr);
-		saddr.sin_family = AF_INET;
-		saddr.sin_port = htons(ovipp->dport);
-		connect(*sfd, (struct sockaddr *)&saddr, sizeof(saddr));
+		memset(saddr, 0, sizeof(CB_SOCKADDR_IN_T));
+		saddr->sin_addr.s_addr = htonl(ovipp->daddr);
+		saddr->sin_family = AF_INET;
+		saddr->sin_port = htons(ovipp->dport);
+		connect(*sfd, (struct sockaddr *)saddr, sizeof(CB_SOCKADDR_IN_T));
 	}
 	return 0;
 }
@@ -70,7 +70,8 @@ int cb_rawsock_open(cb_rawsock_paras_t *llrawp, CB_SOCKET_T *fd, CB_SOCKADDR_LL_
 			UB_LOG(UBL_ERROR,"%s:ovipp parameters don't exist\n",__func__);
 			return -1;
 		}
-		if(ovip_socket_open(fd, llrawp->ovipp)) {
+		// sizeof(CB_SOCKADDR_LL_T) >= sizeof(CB_SOCKADDR_IN_T) must be true
+		if(ovip_socket_open(fd, (CB_SOCKADDR_IN_T *)addr,  llrawp->ovipp)) {
 			*fd=0;
 			return -1;
 		}

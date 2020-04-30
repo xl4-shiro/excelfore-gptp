@@ -25,6 +25,10 @@
 
 #define CB_COMBASE_LOGCAT 1
 
+#ifdef GHINTEGRITY
+#define CB_THREAD_NON_POSIX_H "ghintg/cb_gh_thread.h" 
+#endif
+
 #ifndef COMBASE_NO_ETH
 #include "cb_ethernet.h"
 #endif
