@@ -11,13 +11,11 @@ LT_INIT([static])
 
 AC_CONFIG_SUBDIRS([xl4unibase xl4combase gptp2 ])
 AC_SUBST([BSUBDIRS],["xl4unibase xl4combase gptp2 "])
-AC_CONFIG_FILES([Makefile xl4unibase/Makefile xl4combase/Makefile gptp2/Makefile \
-\
-])
+AC_CONFIG_FILES([Makefile xl4unibase/Makefile xl4combase/Makefile gptp2/Makefile ])
 
 AC_CONFIG_MACRO_DIR([m4])
 
-AM_PATH_PYTHON([2.7])
+AM_PATH_PYTHON([3])
 
 # Check if posix platform
 AC_CHECK_HEADERS([pthread.h],
@@ -51,6 +49,8 @@ AC_ARG_ENABLE([event],
 	AS_HELP_STRING([--disable-event],[disable building eventing programs]))
 AC_ARG_ENABLE([understpl],
 	AS_HELP_STRING([--disable-understpl],[enable understpl mode build]))
+AC_ARG_ENABLE([wrapper],
+	AS_HELP_STRING([--enable-wrapper],[enable building avtpc wrapper when shared memory is not prefered]))
 
 AM_CONDITIONAL(NO_ETHERNET, [test x"$enable_ethernet" = "xno"])
 AM_CONDITIONAL(NO_INET, [test x"$enable_inet" = "xno"])
@@ -60,6 +60,9 @@ AM_CONDITIONAL(NO_IPCSOCK, [test x"$enable_ipcsock" = "xno"])
 AM_CONDITIONAL(NO_EVENT, [test x"$enable_event" = "xno"])
 AM_CONDITIONAL(UNITTEST_MEMTEST, [test x"$enable_unittest_memtest" = "xyes"])
 AM_CONDITIONAL(BUILD_IN_STPL, [test x"$enable_understpl" != "xno"])
+AM_CONDITIONAL(NO_H264, [test x"$enable_h264" = "xno"])
+AM_CONDITIONAL(NO_MJPEG, [test x"$enable_mjpeg" = "xno"])
+AM_CONDITIONAL(AVTPC_WRAPPER, [test x"$enable_wrapper" = "xyes"])
 
 
 AC_OUTPUT

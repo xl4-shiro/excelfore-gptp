@@ -65,8 +65,6 @@ static int gptpnet_cb(void *cb_data, int portIndex, gptpnet_event_t event,
 	switch(event){
 	case GPTPNET_EVENT_NONE:
 		break;
-	case GPTPNET_EVENT_IPC:
-		break;
 	case GPTPNET_EVENT_TIMEOUT:
 		for(ndevIndex=0;ndevIndex<gptpnet_num_netdevs(gpnet);ndevIndex++){
 			if(gptpnet_ptpdev(gpnet,ndevIndex)[0]) break;
@@ -158,7 +156,7 @@ int main(int argc, char *argv[])
 	netdevs[i]=NULL;
 
 	gptpclock_init(1, MAX_PORTS_NUM);
-	gpnet=gptpnet_init(gptpnet_cb, &gpnet, netdevs, &np, NULL);
+	gpnet=gptpnet_init(gptpnet_cb, NULL, &gpnet, netdevs, &np, NULL);
 	gptpnet_activate(gpnet);
 	gptpnet_eventloop(gpnet, &stopgptp);
 

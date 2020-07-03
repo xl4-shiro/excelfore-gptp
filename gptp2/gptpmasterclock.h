@@ -32,10 +32,39 @@
 #define __GPTPMASTERCLOCK_H_
 
 /**
- * @brief initialize to get gptp clock through the shared memory
- * if previously initialized, it will simply return 0
+ * @brief Pre-initialize to get the gptp clock.
+ * @param object platform specific object, refer to the platforms supported below.
+ * @return -1 on error, 0 on Successful initialization.
+ *
+ * @note This API needs to called only on platforms that recommends against using
+ * shared memory.
+ *
+ * The following are known target platforms requiring this API:
+ *
+ * GHS INTEGRITY:
+ *
+ *     usage: gptpmasterclock_preinit(Semaphore object)
+ *           The semaphore object used to synchronize communication between
+ *           gptp2d VAS and VASes the uses libgptp2If library. User can get
+ *           this shared semaphore object by calling the INTEGRITY API
+ *           SemaphoreObjectNumber(TheObjectIndex). Where TheObjectIndex
+ *           is a LINK object number defined in the application's ".int"
+ *           file which is linked to the binary semaphore defined in the
+ *           gptp2d '.int' file.
+ *           e.g: gptpmasterclock_preinit(SemaphoreObjectNumber(10));
+ *
+ * This API doesn't need to be called in platforms other than the above mentioned.
+ * Calling this API in other platforms has no effect.
+ */
+int gptpmasterclock_preinit(void *object);
+
+/**
+ * @brief initialize to get gptp clock from gptp2 daemon.
+ * if previously initialized, it will simply return 0.
  * @param shemem_name	shared memory node name. set NULL to use the default
  * @return -1 on error, 0 on Successful initialization.
+ * @note   argument 'shmem_name' will not be used in platforms that recommends against
+ * using shared memory (e.g GHS INTEGRITY). Pass NULL is such case.
  */
 int gptpmasterclock_init(const char *shmem_name);
 

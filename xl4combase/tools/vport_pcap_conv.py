@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 '''
 /*
  * excelfore-gptp - Implementation of gPTP(IEEE 802.1AS)

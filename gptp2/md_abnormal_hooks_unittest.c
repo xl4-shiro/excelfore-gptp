@@ -186,7 +186,7 @@ static int setup(void **state)
 	ubb_default_initpara(&init_para);
 	init_para.ub_log_initstr=UBL_OVERRIDE_ISTR("4,ubase:45,cbase:45,gptp:46", "UBL_GPTP");
 	unibase_init(&init_para);
-	gpnet=gptpnet_init(gptpnet_cb, NULL, netdevs, &np, NULL);
+	gpnet=gptpnet_init(gptpnet_cb, NULL, NULL, netdevs, &np, NULL);
 
 	return 0;
 }

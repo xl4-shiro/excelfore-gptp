@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 '''
 /*
  * excelfore-gptp - Implementation of gPTP(IEEE 802.1AS)
@@ -21,6 +21,7 @@
  * <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
  */
 '''
+from __future__ import print_function
 import kivy
 kivy.require('1.9.0')
 from kivy.app import App
@@ -32,7 +33,7 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.graphics import Color, Rectangle
 from kivy.config import Config
-from ConfigParser import SafeConfigParser
+from configparser import ConfigParser
 from subprocess import Popen, call, PIPE
 import json
 import socket, select, sys, os, re
@@ -149,13 +150,13 @@ CLOCK_DATA_FMT="=iiqb8B8BBH"
 
 class ReadConfig(object):
     def __init__(self, fname="gpmongui.conf"):
-        parser = SafeConfigParser()
+        parser = ConfigParser()
         self.mac_list=[]
         if not parser.read([fname]): return
         mac_slist=json.loads(parser.get('devices','mac_list'))
         self.name_list=[]
         for ma in mac_slist:
-            print ma
+            print(ma)
             sl=ma[1].split(':')
             self.mac_list.append([int(s, 16) for s in sl])
             self.name_list.append(ma[0])
@@ -206,7 +207,7 @@ class ListenIpcSocket(object):
             self.server_node=(self.udpaddr, self.udpport)
         try:
             self.sock.connect(self.server_node)
-        except socket.error, msg:
+        except socket.error as msg:
             print("can't connect. Is gptp2d running? ", msg)
             self.sock.close()
             self.sock=None
@@ -241,7 +242,7 @@ class ListenIpcSocket(object):
             self.sock.send(sd)
             # start with the disabled state
             _gpmon_scm.ipcsock.send_tashpaer_control(False)
-        except socket.error, msg:
+        except socket.error as msg:
             print("can't connect. Is gptp2d running? ", msg)
             self.sock.close()
             self.sock=None
@@ -271,7 +272,7 @@ class ListenIpcSocket(object):
                 sd=struct.pack(REQ_DATA_FMT, _const.enums['GPTPIPC_CMD_REQ_NDPORT_INFO'],0,-1,0)
                 try:
                     self.sock.send(sd)
-                except socket.error, msg:
+                except socket.error as msg:
                     print("can't send msg. Is gptp2d running? ", msg)
                     _gpmon_scm.activate(False)
                     self.ipc_connect()
@@ -279,7 +280,7 @@ class ListenIpcSocket(object):
         self.pcount=0
         try:
             self.decode_rdata(self.sock.recv(512))
-        except socket.error, msg:
+        except socket.error as msg:
             print("can't receive msg. Is gptp2d running? ", msg)
             _gpmon_scm.activate(False)
             return
@@ -306,7 +307,7 @@ class ListenIpcSocket(object):
 
     def get_flags(self, d):
         rn=[]
-        for k,v in _const.flags.iteritems():
+        for k,v in _const.flags.items():
             if d & v:
                 rn.append(k)
         return ",".join(rn)
@@ -319,11 +320,11 @@ class ListenIpcSocket(object):
         rdata=rdata[struct.calcsize(fmt):-1]
         if dtype==_const.enums['GPTPIPC_GPTPD_NOTICE']:
             self.decode_notice(rdata)
-	elif dtype==_const.enums['GPTPIPC_GPTPD_NDPORTD']:
+        elif dtype==_const.enums['GPTPIPC_GPTPD_NDPORTD']:
             self.decode_ndportd(rdata)
-	elif dtype==_const.enums['GPTPIPC_GPTPD_GPORTD']:
+        elif dtype==_const.enums['GPTPIPC_GPTPD_GPORTD']:
             self.decode_gportd(rdata)
-	elif dtype==_const.enums['GPTPIPC_GPTPD_CLOCKD']:
+        elif dtype==_const.enums['GPTPIPC_GPTPD_CLOCKD']:
             self.decode_clockd(rdata)
         else:
             print("unknown request %d" % dtype)
@@ -375,10 +376,10 @@ class ListenIpcSocket(object):
         portid=rd[:8]
         for i in range(8): rd.pop(0)
         dev_up=rd.pop(0)
-        ndev="".join([rd.pop(0) for i in range(16)])
+        ndev="".join([str(rd.pop(0).decode("utf-8")) for i in range(16)])
         n=ndev.find("\0")
         ndev=ndev[0:n]
-        ptpdev="".join([rd.pop(0) for i in range(32)])
+        ptpdev="".join([str(rd.pop(0).decode("utf-8")) for i in range(32)])
         n=ptpdev.find("\0")
         ptpdev=ptpdev[0:n]
         print("%s, ndev=%s, ptpdev=%s, spped=%s, duplex=%s" % ("Up" if dev_up else "Down",
@@ -488,7 +489,7 @@ class RestartExtSw(ControlSwButton):
                     #self.proc.send_signal(signal.SIGKILL)
                     call(["killall","-SIGKILL",self.pname])
                     if count<20: continue
-                    print "can't stop external process"
+                    print("can't stop external process")
                     raise
             self.proc=None
             self.text=self.text1
@@ -876,8 +877,8 @@ class GpMonApp(App):
 
     def build(self):
         global _gpmon_scm
-        ctlsw = self.kwargs['ctlsw'] if self.kwargs.has_key('ctlsw') else False
-        if self.kwargs.has_key('tashp') and self.kwargs['tashp']:
+        ctlsw = self.kwargs['ctlsw'] if 'ctlsw' in self.kwargs else False
+        if 'tashp' in self.kwargs and self.kwargs['tashp']:
             Config.set('graphics', 'width', TASHP_SCREEN_SIZE[0])
             Config.set('graphics', 'height', TASHP_SCREEN_SIZE[1])
             _gpmon_scm=TashpScreenManager(iperfaddr=self.kwargs['iperfaddr'],

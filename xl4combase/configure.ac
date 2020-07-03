@@ -9,7 +9,7 @@ LT_PREREQ([2.2])
 LT_INIT([static])
 AC_CONFIG_SRCDIR([combase.h])
 
-AM_PATH_PYTHON([2.7])
+AM_PATH_PYTHON([3])
 
 # Checks for programs.
 PKG_PROG_PKG_CONFIG

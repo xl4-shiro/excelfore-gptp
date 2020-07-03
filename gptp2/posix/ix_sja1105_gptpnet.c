@@ -40,7 +40,6 @@
 #define DEFAULT_SJA1105_REC_QUEUES (DEFAULT_SJA1105_NUM_TPORTS*2)
 
 #define GPTPNET_FRAME_SIZE (GPTP_MAX_PACKET_SIZE+sizeof(CB_ETHHDR_T))
-#define GPTPD_IPC_MAX_CONNECTIONS 8
 
 #define PTPCTRL_CORRCLK4TS_BIT (1<<2)
 #define PTPCTRL_RESPTP (1<<3)
@@ -103,12 +102,12 @@ struct gptpnet_data {
 	char ifname[IFNAMSIZ];
 	struct sockaddr_ll addr;
 	gptpnet_cb_t cb_func;
+	cb_ipcsocket_server_rdcb ipc_cb;
 	void *cb_data;
 	int num_ports;
 	swport_t swports[DEFAULT_SJA1105_NUM_TPORTS];
 	int64_t event_ts64;
-	int ipcfd;
-	struct sockaddr_un ipc_address[GPTPD_IPC_MAX_CONNECTIONS];
+	cb_ipcserverd_t *ipcsd;
 	int64_t next_tout64;
 	ub_esarray_cstd_t *txts_events;
 	recmsg_queue_t recmsg_queue[DEFAULT_SJA1105_REC_QUEUES];
@@ -730,6 +729,7 @@ static int gptpnet_catch_event(gptpnet_data_t *gpnet)
 	struct timeval tvtout;
 	int res=0;
 	static int64_t last_ts64=0;
+	int ipcfd=cb_ipcsocket_getfd(gpnet->ipcsd);
 
 	ts64=ub_mt_gettime64();
 	tstout64=ts64-last_ts64;
@@ -747,9 +747,9 @@ static int gptpnet_catch_event(gptpnet_data_t *gpnet)
 	FD_ZERO(&rfds);
 	if(gpnet->portfd) FD_SET(gpnet->portfd, &rfds);
 	maxfd=UB_MAX(maxfd, gpnet->portfd);
-	if(gpnet->ipcfd){
-		FD_SET(gpnet->ipcfd, &rfds);
-		maxfd=UB_MAX(maxfd, gpnet->ipcfd);
+	if(ipcfd){
+		FD_SET(ipcfd, &rfds);
+		maxfd=UB_MAX(maxfd, ipcfd);
 	}
 
 	if(gpnet->next_tout64){
@@ -805,8 +805,8 @@ static int gptpnet_catch_event(gptpnet_data_t *gpnet)
 	if(FD_ISSET(gpnet->portfd, &rfds)){
 		while(!read_netdev_event(gpnet)) ;
 	}
-	if(FD_ISSET(gpnet->ipcfd, &rfds)){
-		res|=read_ipc_event(gpnet);
+	if(FD_ISSET(ipcfd, &rfds)){
+		res|=cb_ipcsocket_server_read(gpnet->ipcsd, gpnet->ipc_cb, gpnet->cb_data);
 	}
 	return res;
 }
@@ -896,13 +896,25 @@ int gptp_clock_adjtime(int spifd, int adjppb)
 	return 0;
 }
 
-gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, void *cb_data, char *netdev[],
-			     int *num_ports, char *master_ptpdev)
+int gptpnet_ipc_notice(gptpnet_data_t *gpnet, gptpipc_gptpd_data_t *ipcdata, int size)
+{
+	return cb_ipcsocket_server_write(gpnet->ipcsd, (uint8_t*)ipcdata, size, NULL);
+}
+
+int gptpnet_ipc_respond(gptpnet_data_t *gpnet, struct sockaddr *addr,
+			gptpipc_gptpd_data_t *ipcdata, int size)
+{
+	return cb_ipcsocket_server_write(gpnet->ipcsd, (uint8_t*)ipcdata, size, addr);
+}
+
+gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, cb_ipcsocket_server_rdcb ipc_cb,
+			     void *cb_data, char *netdev[], int *num_ports, char *master_ptpdev)
 {
 	gptpnet_data_t *gpnet;
 	int i,j;
 	int res;
 	swport_t *swport;
+	uint16_t ipc_udpport;
 
 	if(!netdev || !netdev[0][0]){
 		UB_LOG(UBL_ERROR,"%s:at least one netdev need\n",__func__);
@@ -933,9 +945,14 @@ gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, void *cb_data, char *netdev[]
 		}
 	}
 	gpnet->cb_func=cb_func;
+	gpnet->ipc_cb=ipc_cb;
 	gpnet->cb_data=cb_data;
 	gpnet->event_ts64=ub_mt_gettime64();
-	gptpnet_ipc_init(gpnet);
+	ipc_udpport=gptpconf_get_intitem(CONF_IPC_UDP_PORT);
+	if(ipc_udpport)
+		gpnet->ipcsd=cb_ipcsocket_server_init(NULL, NULL, ipc_udpport);
+	else
+		gpnet->ipcsd=cb_ipcsocket_server_init(GPTP2D_IPC_CB_SOCKET_NODE, "", 0);
 	gpnetg=gpnet;
 	return gpnet;
 }
@@ -959,7 +976,7 @@ int gptpnet_close(gptpnet_data_t *gpnet)
 	for(i=0;i<DEFAULT_SJA1105_NUM_CASC;i++){
 		if(gpnet->spifd[i]) spiClose(gpnet->spifd[i]);
 	}
-	gptpnet_ipc_close(gpnet);
+	cb_ipcsocket_server_close(gpnet->ipcsd);
 	free(gpnet);
 	gpnetg=NULL;
 	return 0;

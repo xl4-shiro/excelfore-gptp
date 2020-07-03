@@ -50,7 +50,7 @@ static int console_debug_print_va(bool console, bool debug, const char * format,
 	return strlen(astr);
 }
 
-static int console_debug_print(bool console, bool debug, const char * format, ...)
+int ub_console_debug_select_print(bool console, bool debug, const char * format, ...)
 {
 	va_list ap;
 	int res;
@@ -238,13 +238,13 @@ int ub_log_print(int cat_index, int flags, ub_dbgmsg_level_t level,
 		if(ubcd.cbset.gettime64) ts64=ubcd.cbset.gettime64(addts);
 		tsec=ts64/UB_SEC_NS;
 		tnsec=ts64%UB_SEC_NS;
-		console_debug_print(level <= ubcd.logmsgd[cat_index].clevel,
+		ub_console_debug_select_print(level <= ubcd.logmsgd[cat_index].clevel,
 				    level <= ubcd.logmsgd[cat_index].dlevel,
 				    "%s:%s:%06u-%06u:", level_mark[level],
 				    ubcd.logmsgd[cat_index].category_name,
 				    tsec%1000000, tnsec/1000);
 	}else{
-		console_debug_print(level <= ubcd.logmsgd[cat_index].clevel,
+		ub_console_debug_select_print(level <= ubcd.logmsgd[cat_index].clevel,
 				    level <= ubcd.logmsgd[cat_index].dlevel,
 				    "%s:%s:", level_mark[level],
 				    ubcd.logmsgd[cat_index].category_name);

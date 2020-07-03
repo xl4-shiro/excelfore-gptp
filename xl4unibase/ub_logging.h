@@ -116,6 +116,14 @@ int ub_debug_print(const char * format, ...) PRINT_FORMAT_ATTRIBUTE1;
 int ub_console_debug_print(const char * format, ...) PRINT_FORMAT_ATTRIBUTE1;
 
 /**
+ * @brief output to console out and debug out by selection
+ * @param console	select output to consol
+ * @param debug	select output to debug memory
+ */
+int ub_console_debug_select_print(bool console, bool debug, const char * format, ...);
+
+
+/**
  * @brief override 'istr' of ub_log_inig
  * @param ns	original 'istr'
  * @param os	overriding string

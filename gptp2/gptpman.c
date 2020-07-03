@@ -522,19 +522,20 @@ not_allowed_domain:
 	return 0;
 }
 
-static int ipc_respond_one_ndport(gptpnet_data_t *gpnetd, int portIndex, int client_index)
+static int ipc_respond_one_ndport(gptpnet_data_t *gpnetd, int portIndex, struct sockaddr *addr)
 {
 	gptpipc_gptpd_data_t pd;
 	memset(&pd, 0, sizeof(pd));
 	pd.dtype=GPTPIPC_GPTPD_NDPORTD;
 	if(gptpnet_get_nlstatus(gpnetd, portIndex-1, &pd.u.ndportd.nlstatus))
 		return -1;
-	gptpnet_ipc_respond(gpnetd, client_index, &pd, sizeof(pd));
+	gptpnet_ipc_respond(gpnetd, addr, &pd, sizeof(pd));
 	return 0;
 }
 
 static int ipc_respond_one_clock(gptpnet_data_t *gpnetd,
-				 int portIndex, int domainNumber, int client_index)
+				 PerTimeAwareSystemGlobal *tasglb,
+				 int portIndex, int domainNumber, struct sockaddr *addr)
 {
 	gptpipc_gptpd_data_t pd;
 	memset(&pd, 0, sizeof(pd));
@@ -545,7 +546,13 @@ static int ipc_respond_one_clock(gptpnet_data_t *gpnetd,
 		       __func__, portIndex, domainNumber);
 		return -1;
 	}
-	gptpnet_ipc_respond(gpnetd, client_index, &pd, sizeof(pd));
+	if(portIndex==0){
+		pd.u.clockd.gmTimeBaseIndicator=tasglb->gmTimeBaseIndicator;
+		memcpy(&pd.u.clockd.lastGmFreqChangePk, &tasglb->lastGmFreqChange,
+		       sizeof(double));
+		pd.u.clockd.lastGmPhaseChange_nsec=tasglb->lastGmPhaseChange.nsec;
+	}
+	gptpnet_ipc_respond(gpnetd, addr, &pd, sizeof(pd));
 	return 0;
 }
 
@@ -554,7 +561,7 @@ static int ipc_respond_one_gport(gptpnet_data_t *gpnetd,
 				 PerTimeAwareSystemGlobal *tasglb,
 				 BmcsPerTimeAwareSystemGlobal *btasglb,
 				 int portIndex, int domainNumber, int domainIndex,
-				 int client_index)
+				 struct sockaddr *addr)
 {
 	gptpipc_gptpd_data_t pd;
 	memset(&pd, 0, sizeof(pd));
@@ -572,12 +579,12 @@ static int ipc_respond_one_gport(gptpnet_data_t *gpnetd,
 		return -1;
 	memcpy(&pd.u.gportd.annPathSequence, &bppglb->annPathSequence,
 	       bppglb->annPathSequenceCount * sizeof(ClockIdentity));
-	gptpnet_ipc_respond(gpnetd, client_index, &pd, sizeof(pd));
+	gptpnet_ipc_respond(gpnetd, addr, &pd, sizeof(pd));
 	return 0;
 }
 
 static int ipc_respond_statsd_info(gptpman_data_t *gpmand, int pi, int resetcmd,
-				   int client_index)
+				   struct sockaddr *addr)
 {
 	gptpipc_gptpd_data_t pd;
 	md_pdelay_req_stat_data_t *prsd;
@@ -604,11 +611,11 @@ static int ipc_respond_statsd_info(gptpman_data_t *gpmand, int pi, int resetcmd,
 	pd.u.statsd.pdelay_resp_send=ppsd->pdelay_resp_send;
 	pd.u.statsd.pdelay_resp_fup_send=ppsd->pdelay_resp_fup_send;
 
-	gptpnet_ipc_respond(gpmand->gpnetd, client_index, &pd, sizeof(pd));
+	gptpnet_ipc_respond(gpmand->gpnetd, addr, &pd, sizeof(pd));
 	return 0;
 }
 static int ipc_respond_stattd_info(gptpman_data_t *gpmand, int di, int pi, int resetcmd,
-				   int client_index)
+				   struct sockaddr *addr)
 {
 	gptpipc_gptpd_data_t pd;
 	md_sync_send_stat_data_t *sssd;
@@ -646,24 +653,24 @@ static int ipc_respond_stattd_info(gptpman_data_t *gpmand, int di, int pi, int r
 	pd.u.stattd.signal_msg_interval_rec=grsd->signal_msg_interval_rec;
 	pd.u.stattd.signal_gptp_capable_rec=grsd->signal_gptp_capable_rec;
 
-	gptpnet_ipc_respond(gpmand->gpnetd, client_index, &pd, sizeof(pd));
+	gptpnet_ipc_respond(gpmand->gpnetd, addr, &pd, sizeof(pd));
 	return 0;
 }
 
-static int get_domain_index_ipc(gptpman_data_t *gpmand, event_data_ipc_t *ipcrd)
+static int get_domain_index_ipc(gptpman_data_t *gpmand, gptpipc_client_req_data_t *reqdata)
 {
-	if(ipcrd->reqdata.domainNumber==-1){
-		if(ipcrd->reqdata.domainIndex>=0){
-			if(ipcrd->reqdata.domainIndex>=gpmand->max_domains) return -1;
-			if(!gpmand->tasds[ipcrd->reqdata.domainIndex].tasglb) return -1;
-			ipcrd->reqdata.domainNumber=
-				gpmand->tasds[ipcrd->reqdata.domainIndex].tasglb->domainNumber;
-			return ipcrd->reqdata.domainIndex;
+	if(reqdata->domainNumber==-1){
+		if(reqdata->domainIndex>=0){
+			if(reqdata->domainIndex>=gpmand->max_domains) return -1;
+			if(!gpmand->tasds[reqdata->domainIndex].tasglb) return -1;
+			reqdata->domainNumber=
+				gpmand->tasds[reqdata->domainIndex].tasglb->domainNumber;
+			return reqdata->domainIndex;
 		}
 		return -2; // the both are -1
 	}
-	ipcrd->reqdata.domainIndex=get_domain_index(gpmand, ipcrd->reqdata.domainNumber);
-	return ipcrd->reqdata.domainIndex;
+	reqdata->domainIndex=get_domain_index(gpmand, reqdata->domainNumber);
+	return reqdata->domainIndex;
 }
 
 static int run_ext_script(FILE **extstdin, int arg)
@@ -685,141 +692,35 @@ static int run_ext_script(FILE **extstdin, int arg)
 #endif
 }
 
-static int ipc_register_abnormal_event(event_data_ipc_t *ipcrd)
+static int ipc_register_abnormal_event(gptpipc_client_req_data_t *reqdata)
 {
 	md_abn_event_t aevent;
 
 	memset(&aevent,0,sizeof(aevent));
-	aevent.domainNumber=ipcrd->reqdata.domainNumber;
-	aevent.ndevIndex=ipcrd->reqdata.portIndex-1;
-	aevent.msgtype=(PTPMsgType)ipcrd->reqdata.abnd.msgtype;
-	aevent.eventtype=(md_abn_event_type)ipcrd->reqdata.abnd.eventtype;
-	aevent.eventrate=ipcrd->reqdata.abnd.eventrate;
-	aevent.repeat=ipcrd->reqdata.abnd.repeat;
-	aevent.interval=ipcrd->reqdata.abnd.interval;
-	aevent.eventpara=ipcrd->reqdata.abnd.eventpara;
-	if(ipcrd->reqdata.abnd.subcmd==0){
+	aevent.domainNumber=reqdata->domainNumber;
+	aevent.ndevIndex=reqdata->portIndex-1;
+	aevent.msgtype=(PTPMsgType)reqdata->abnd.msgtype;
+	aevent.eventtype=(md_abn_event_type)reqdata->abnd.eventtype;
+	aevent.eventrate=reqdata->abnd.eventrate;
+	aevent.repeat=reqdata->abnd.repeat;
+	aevent.interval=reqdata->abnd.interval;
+	aevent.eventpara=reqdata->abnd.eventpara;
+	if(reqdata->abnd.subcmd==0){
 		return md_abnormal_register_event(&aevent);
 	}
-	if(ipcrd->reqdata.abnd.msgtype==-1){
+	if(reqdata->abnd.msgtype==-1){
 		return md_abnormal_deregister_all_events();
 	}
 	return md_abnormal_deregister_msgtype_events(aevent.msgtype);
 }
 
-static int gptpnet_cb_ipc(gptpman_data_t *gpmand, event_data_ipc_t *ipcrd, uint64_t cts64)
-{
-	int di,ddi,pi,ppi;
-	int resetcmd=0;
-	uint32_t aligntime, cycletime;
-	switch(ipcrd->reqdata.cmd){
-	case GPTPIPC_CMD_REQ_NDPORT_INFO:
-		if(ipcrd->reqdata.portIndex>0){
-			return ipc_respond_one_ndport(gpmand->gpnetd, ipcrd->reqdata.portIndex,
-						      ipcrd->client_index);
-		}else{
-			for(pi=1;pi<gpmand->max_ports;pi++)
-				ipc_respond_one_ndport(gpmand->gpnetd, pi, ipcrd->client_index);
-		}
-		return 0;
-	case GPTPIPC_CMD_REQ_CLOCK_INFO:
-		di=get_domain_index_ipc(gpmand, ipcrd);
-		if(di==-1) return -1;
-		if(di>=0){
-			if(!DOMAIN_DATA_EXIST(di)) return -1;
-			return ipc_respond_one_clock(gpmand->gpnetd,
-						     ipcrd->reqdata.portIndex,
-						     ipcrd->reqdata.domainNumber,
-						     ipcrd->client_index);
-		}
-		for(di=0;di<gpmand->max_domains;di++){
-			if(!DOMAIN_DATA_EXIST(di)) continue;
-			// clockIndex=0 is the master clock and IPC needs only that info.
-			ipc_respond_one_clock(gpmand->gpnetd, 0, di, ipcrd->client_index);
-		}
-		return 0;
-	case GPTPIPC_CMD_REQ_GPORT_INFO:
-		di=get_domain_index_ipc(gpmand, ipcrd);
-		if(di==-1) return 0;
-		// for a specific domain and a apecific port
-		if(di>=0 && ipcrd->reqdata.portIndex!=0){
-			if(!PORT_DATA_EXIST(di, ipcrd->reqdata.portIndex)) return -1;
-			return ipc_respond_one_gport(
-				gpmand->gpnetd,
-				gpmand->tasds[di].ptds[ipcrd->reqdata.portIndex].ppglb,
-				gpmand->tasds[di].ptds[ipcrd->reqdata.portIndex].bppglb,
-				gpmand->tasds[di].tasglb,
-				gpmand->tasds[di].btasglb,
-				ipcrd->reqdata.portIndex,
-				ipcrd->reqdata.domainNumber, di, ipcrd->client_index);
-		}
-		ppi=di;
-		for(di=0;di<gpmand->max_domains;di++){
-			if(ppi>=0 && ppi!=di) continue; // skip for a specific domain
-			for(pi=1;pi<gpmand->max_ports;pi++){
-				if(!PORT_DATA_EXIST(di,pi)) continue;
-				ipc_respond_one_gport(
-					gpmand->gpnetd,
-					gpmand->tasds[di].ptds[pi].ppglb,
-					gpmand->tasds[di].ptds[pi].bppglb,
-					gpmand->tasds[di].tasglb,
-					gpmand->tasds[di].btasglb,
-					pi, gpmand->tasds[di].tasglb->domainNumber, di,
-					ipcrd->client_index);
-			}
-		}
-		return 0;
-	case GPTPIPC_CMD_ACTIVE_DOMAINT_SWITCH:
-		gptpclock_active_domain_switch(ipcrd->reqdata.domainIndex);
-		return 0;
-	case GPTPIPC_CMD_RUN_EXT_SCRIPT:
-		// use ipcrd->reqdata.domainNumber as single argument
-		run_ext_script(&gpmand->extcmdstdin, ipcrd->reqdata.domainNumber);
-		return 0;
-	case GPTPIPC_CMD_TSN_SCHEDULE_CONTROL:
-		// use ipcrd->reqdata.domainNumber
-		// ipcrd->reqdata.domainNumber=0: to stop,
-		// ipcrd->reqdata.domainNumber=1: to start
-		aligntime=gptpconf_get_intitem(CONF_TSN_SCHEDULE_ALIGNTIME);
-		if(ipcrd->reqdata.domainNumber==0)
-			cycletime=0;
-		else
-			cycletime=gptpconf_get_intitem(CONF_TSN_SCHEDULE_CYCLETIME);
-		gptpnet_tsn_schedule(gpmand->gpnetd, aligntime, cycletime);
-		return 0;
-	case GPTPIPC_CMD_REQ_STAT_INFO_RESET:
-		resetcmd=1;
-	case GPTPIPC_CMD_REQ_STAT_INFO:
-		ddi=get_domain_index_ipc(gpmand, ipcrd);
-		if(ipcrd->reqdata.domainNumber>=0 && ddi<0) return -1;
-		ppi=ipcrd->reqdata.portIndex;
-		for(di=0;di<gpmand->max_domains;di++){
-			if(ddi>=0 && ddi!=di) continue;
-			for(pi=1;pi<gpmand->max_ports;pi++){
-				if(ppi>0 && ppi!=pi) continue;
-				if(di==0) ipc_respond_statsd_info(gpmand, pi, resetcmd,
-								  ipcrd->client_index);
-				ipc_respond_stattd_info(gpmand, di, pi, resetcmd,
-							ipcrd->client_index);
-			}
-		}
-		return 0;
-	case GPTPIPC_CMD_REG_ABNORMAL_EVENT:
-		return ipc_register_abnormal_event(ipcrd);
-	default:
-		return -1;
-	}
-}
-
 static int ipc_clock_master_clock_notice(gptpnet_data_t *gpnetd,
 					 BmcsPerTimeAwareSystemGlobal *btasglb,
-					 int di, uint8_t domainNumber)
+					 PerTimeAwareSystemGlobal *tasglb, int di)
 {
 	gptpipc_gptpd_data_t ipcd;
 	int do_phase=gptpconf_get_intitem(CONF_IPC_NOTICE_PHASE_UPDATE);
-	ScaledNs lastGmPhaseChange;
 	uint32_t aligntime, cycletime;
-	double lastGmFreqChange;
 	// master clock (clockIndex=0) for PHASE_UPDATE and GM_SYNC
 	memset(&ipcd, 0, sizeof(ipcd));
 	ipcd.dtype=GPTPIPC_GPTPD_NOTICE;
@@ -842,14 +743,14 @@ static int ipc_clock_master_clock_notice(gptpnet_data_t *gpnetd,
 		if(!do_phase) return 0;
 	}
 
-	ipcd.u.notice.domainNumber=domainNumber;
+	ipcd.u.notice.domainNumber=tasglb->domainNumber;
 	ipcd.u.notice.domainIndex=di;
-	memcpy(&lastGmFreqChange, &ipcd.u.notice.lastGmFreqChangePk, sizeof(double));
-	gptpclock_get_clock_params(0,domainNumber,
-				   (uint16_t *)&ipcd.u.notice.gmTimeBaseIndicator,
-				   &lastGmPhaseChange,
-				   &lastGmFreqChange);
-	ipcd.u.notice.lastGmPhaseChange_nsec=lastGmPhaseChange.nsec;
+
+	ipcd.u.notice.gmTimeBaseIndicator=tasglb->gmTimeBaseIndicator;
+	memcpy(&ipcd.u.notice.lastGmFreqChangePk, &tasglb->lastGmFreqChange,
+	       sizeof(double));
+	ipcd.u.notice.lastGmPhaseChange_nsec=tasglb->lastGmPhaseChange.nsec;
+
 	return gptpnet_ipc_notice(gpnetd, &ipcd, sizeof(ipcd));
 }
 
@@ -890,8 +791,8 @@ static int ipc_clock_notice(gptpman_data_t *gpmand)
 	for(di=0;di<gpmand->max_domains;di++){
 		if(!DOMAIN_DATA_EXIST(di)) continue;
 		ipc_clock_master_clock_notice(gpmand->gpnetd,
-					      gpmand->tasds[di].btasglb, di,
-					      gpmand->tasds[di].tasglb->domainNumber);
+					      gpmand->tasds[di].btasglb,
+					      gpmand->tasds[di].tasglb, di);
 		ipc_clock_this_clock_notice(gpmand->gpnetd, di,
 					    gpmand->tasds[di].tasglb->domainNumber,
 					    gpmand->tasds[di].tasglb->thisClockIndex);
@@ -938,16 +839,129 @@ static int gptpnet_cb(void *cb_data, int portIndex, gptpnet_event_t event,
 		res = gptpnet_cb_txts(gpmand, portIndex,
 				       (event_data_txts_t *)event_data, cts64);
 		break;
-	case GPTPNET_EVENT_IPC:
-		if(gptpnet_cb_ipc(gpmand, (event_data_ipc_t *)event_data, cts64)){
-			UB_LOG(UBL_WARN, "invalid values in GPTPNET_EVENT_IPC\n");
-		}
-		break;
 	}
 	ub_log_flush();
 	if(res) return res;
 	ipc_clock_notice(gpmand);
 	return 0;
+}
+
+static int gptpnet_ipc_cb(void *cbdata, uint8_t *rdata, int size, struct sockaddr *addr)
+{
+	int di,ddi,pi,ppi;
+	int resetcmd=0;
+	uint32_t aligntime, cycletime;
+	gptpipc_client_req_data_t *reqdata=(gptpipc_client_req_data_t *)rdata;
+	gptpman_data_t *gpmand=(gptpman_data_t*)cbdata;
+
+	if(size < 16) {
+		UB_LOG(UBL_INFO,"%s:wrong received size:%d\n",__func__, size);
+		return -1;
+	}
+
+	switch(reqdata->cmd){
+	case GPTPIPC_CMD_DISCONNECT:
+		gptpnet_ipc_client_remove(gpmand->gpnetd, addr);
+		return 0;
+	case GPTPIPC_CMD_REQ_NDPORT_INFO:
+		if(reqdata->portIndex>0){
+			return ipc_respond_one_ndport(gpmand->gpnetd, reqdata->portIndex,
+						      addr);
+		}else{
+			for(pi=1;pi<gpmand->max_ports;pi++)
+				ipc_respond_one_ndport(gpmand->gpnetd, pi, addr);
+		}
+		return 0;
+	case GPTPIPC_CMD_REQ_CLOCK_INFO:
+		di=get_domain_index_ipc(gpmand, reqdata);
+		if(di==-1) return -1;
+		if(di>=0){
+			if(!DOMAIN_DATA_EXIST(di)) return -1;
+			return ipc_respond_one_clock(gpmand->gpnetd,
+						     gpmand->tasds[di].tasglb,
+						     reqdata->portIndex,
+						     reqdata->domainNumber,
+						     addr);
+		}
+		for(di=0;di<gpmand->max_domains;di++){
+			if(!DOMAIN_DATA_EXIST(di)) continue;
+			// clockIndex=0 is the master clock and IPC needs only that info.
+			ipc_respond_one_clock(gpmand->gpnetd,
+					      gpmand->tasds[di].tasglb,
+					      0, di, addr);
+		}
+		return 0;
+	case GPTPIPC_CMD_REQ_GPORT_INFO:
+		di=get_domain_index_ipc(gpmand, reqdata);
+		if(di==-1) return 0;
+		// for a specific domain and a apecific port
+		if(di>=0 && reqdata->portIndex!=0){
+			if(!PORT_DATA_EXIST(di, reqdata->portIndex)) return -1;
+			return ipc_respond_one_gport(
+				gpmand->gpnetd,
+				gpmand->tasds[di].ptds[reqdata->portIndex].ppglb,
+				gpmand->tasds[di].ptds[reqdata->portIndex].bppglb,
+				gpmand->tasds[di].tasglb,
+				gpmand->tasds[di].btasglb,
+				reqdata->portIndex,
+				reqdata->domainNumber, di, addr);
+		}
+		ppi=di;
+		for(di=0;di<gpmand->max_domains;di++){
+			if(ppi>=0 && ppi!=di) continue; // skip for a specific domain
+			for(pi=1;pi<gpmand->max_ports;pi++){
+				if(!PORT_DATA_EXIST(di,pi)) continue;
+				ipc_respond_one_gport(
+					gpmand->gpnetd,
+					gpmand->tasds[di].ptds[pi].ppglb,
+					gpmand->tasds[di].ptds[pi].bppglb,
+					gpmand->tasds[di].tasglb,
+					gpmand->tasds[di].btasglb,
+					pi, gpmand->tasds[di].tasglb->domainNumber, di,
+					addr);
+			}
+		}
+		return 0;
+	case GPTPIPC_CMD_ACTIVE_DOMAINT_SWITCH:
+		gptpclock_active_domain_switch(reqdata->domainIndex);
+		return 0;
+	case GPTPIPC_CMD_RUN_EXT_SCRIPT:
+		// use reqdata->domainNumber as single argument
+		run_ext_script(&gpmand->extcmdstdin, reqdata->domainNumber);
+		return 0;
+	case GPTPIPC_CMD_TSN_SCHEDULE_CONTROL:
+		// use reqdata->domainNumber
+		// reqdata->domainNumber=0: to stop,
+		// reqdata->domainNumber=1: to start
+		aligntime=gptpconf_get_intitem(CONF_TSN_SCHEDULE_ALIGNTIME);
+		if(reqdata->domainNumber==0)
+			cycletime=0;
+		else
+			cycletime=gptpconf_get_intitem(CONF_TSN_SCHEDULE_CYCLETIME);
+		gptpnet_tsn_schedule(gpmand->gpnetd, aligntime, cycletime);
+		return 0;
+	case GPTPIPC_CMD_REQ_STAT_INFO_RESET:
+		resetcmd=1;
+	case GPTPIPC_CMD_REQ_STAT_INFO:
+		ddi=get_domain_index_ipc(gpmand, reqdata);
+		if(reqdata->domainNumber>=0 && ddi<0) return -1;
+		ppi=reqdata->portIndex;
+		for(di=0;di<gpmand->max_domains;di++){
+			if(ddi>=0 && ddi!=di) continue;
+			for(pi=1;pi<gpmand->max_ports;pi++){
+				if(ppi>0 && ppi!=pi) continue;
+				if(di==0) ipc_respond_statsd_info(gpmand, pi, resetcmd,
+								  addr);
+				ipc_respond_stattd_info(gpmand, di, pi, resetcmd,
+							addr);
+			}
+		}
+		return 0;
+	case GPTPIPC_CMD_REG_ABNORMAL_EVENT:
+		return ipc_register_abnormal_event(reqdata);
+	default:
+		return -1;
+	}
 }
 
 static int stopgptp;
@@ -1251,7 +1265,7 @@ int gptpman_run(char *netdevs[], int max_ports, int max_domains, char *inittm)
 
 	/* a network device which has master ptpdev becomes the first device,
 	   so that clockIndex=1 is safe to use for thisClockIndex */
-	gpmand->gpnetd=gptpnet_init(gptpnet_cb, gpmand, netdevs, &max_ports,
+	gpmand->gpnetd=gptpnet_init(gptpnet_cb, gptpnet_ipc_cb, gpmand, netdevs, &max_ports,
 				    gptpconf_get_item(CONF_MASTER_PTPDEV));
 	if(!gpmand->gpnetd) goto erexit;
 	// increment max_ports to add the ClockMaster port as port=0
@@ -1288,6 +1302,7 @@ int gptpman_run(char *netdevs[], int max_ports, int max_domains, char *inittm)
 
 	if(gptpnet_activate(gpmand->gpnetd)) goto erexit;
 	if(gptpconf_get_intitem(CONF_ACTIVATE_ABNORMAL_HOOKS)) md_abnormal_init();
+	GPTP_READY_NOTICE;
 	gptpnet_eventloop(gpmand->gpnetd, &stopgptp);
 	all_sm_close(gpmand);
 	md_abnormal_close();

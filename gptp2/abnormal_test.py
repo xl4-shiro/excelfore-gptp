@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 '''
 /*
  * excelfore-gptp - Implementation of gPTP(IEEE 802.1AS)
@@ -117,7 +117,7 @@ class gptp2d_proc(object):
         self.ipcsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             self.ipcsock.connect(("127.0.0.1", self.ipc_port))
-        except socket.error, msg:
+        except socket.error as msg:
             logger.info("can't connect. IPC %s:%s" % msg)
             self.ipcsock_close()
             return -1

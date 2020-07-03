@@ -47,6 +47,10 @@ int cb_ipcsocket_init(int *ipcfd, char *node, char *suffix, char *server_node)
 	struct sockaddr_un serveraddress;
 	int len;
 
+	if(!node){
+		UB_LOG(UBL_ERROR,"'node' must be set\n");
+		return -1;
+	}
 	UB_LOG(UBL_INFO, "%s:combase-"XL4PKGVERSION"\n", __func__);
 	if((*ipcfd=CB_SOCKET(AF_UNIX, SOCK_DGRAM, 0))<0){
 		UB_LOG(UBL_ERROR,"failed to open ipc socket: %s\n", strerror(errno));
@@ -147,4 +151,205 @@ int cb_ipcsocket_close(int ipcfd, char *node, char *suffix)
 		res=-1;
 	}
 	return res;
+}
+
+struct cb_ipcserverd {
+	uint16_t udpport;
+	int fd;
+	char *node;
+	char *suffix;
+	ub_esarray_cstd_t *ipc_address;
+};
+
+static int find_ipc_client_in(cb_ipcserverd_t *ipcsd, struct sockaddr_in *client_address)
+{
+	int i;
+	int en=ub_esarray_ele_nums(ipcsd->ipc_address);
+	for(i=0;i<en;i++){
+		struct sockaddr_in *addr=
+			(struct sockaddr_in *)ub_esarray_get_ele(ipcsd->ipc_address, i);
+		if(addr->sin_addr.s_addr == client_address->sin_addr.s_addr &&
+		   addr->sin_port == client_address->sin_port){
+			// client_address is already registered
+			return i;
+		}
+	}
+	return -1;
+}
+
+static int find_ipc_client_un(cb_ipcserverd_t *ipcsd, struct sockaddr_un *client_address)
+{
+	int i;
+	int en=ub_esarray_ele_nums(ipcsd->ipc_address);
+	for(i=0;i<en;i++){
+		struct sockaddr_un *addr=
+			(struct sockaddr_un *)ub_esarray_get_ele(ipcsd->ipc_address, i);
+		if(!strcmp(addr->sun_path, client_address->sun_path)){
+			// client_address is already registered
+			return i;
+		}
+	}
+	return -1;
+}
+
+static int find_ipc_client(cb_ipcserverd_t *ipcsd, struct sockaddr *client_address)
+{
+	if(client_address->sa_family==AF_UNIX){
+		return find_ipc_client_un(ipcsd, (struct sockaddr_un *)client_address);
+	}else if(client_address->sa_family==AF_INET){
+		return find_ipc_client_in(ipcsd, (struct sockaddr_in *)client_address);
+	}
+	UB_LOG(UBL_ERROR,"%s:wrong IPC protocol\n",__func__);
+	return -1;
+}
+
+static int register_ipc_client(cb_ipcserverd_t *ipcsd, struct sockaddr *client_address)
+{
+	int i;
+	struct sockaddr_un *addr;
+	struct sockaddr_un paddr;
+	i=find_ipc_client(ipcsd, client_address);
+	if(i>=0) return i;
+	// As sizeof(struct sockaddr_un) > sizeof(struct sockaddr_in),
+	// we use 'sockaddr_un' even for 'sockaddr_in'
+	addr=(struct sockaddr_un *)ub_esarray_get_newele(ipcsd->ipc_address);
+	if(addr){
+		memset(addr, 0, sizeof(struct sockaddr_un));
+		memcpy(addr, client_address, sizeof(struct sockaddr_un));
+		return ub_esarray_ele_nums(ipcsd->ipc_address)-1;
+	}
+	UB_LOG(UBL_WARN,"%s:ipc clients space is full, remove the oldest connection\n",__func__);
+	ub_esarray_pop_ele(ipcsd->ipc_address, (ub_esarray_element_t *)&paddr);
+	addr=(struct sockaddr_un *)ub_esarray_get_newele(ipcsd->ipc_address);
+	if(!addr) {
+		UB_LOG(UBL_ERROR,"%s:shouldn't happen\n",__func__);
+		return -1;
+	}
+	memset(addr, 0, sizeof(struct sockaddr_un));
+	memcpy(addr, client_address, sizeof(struct sockaddr_un));
+	return ub_esarray_ele_nums(ipcsd->ipc_address)-1;
+}
+
+static int one_client_write(cb_ipcserverd_t *ipcsd, uint8_t *data, int size,
+			    struct sockaddr *client_address)
+{
+	int ssize;
+	int res;
+	if(!client_address) return -1;
+	if(ipcsd->udpport)
+		ssize=sizeof(struct sockaddr_in);
+	else
+		ssize=sizeof(struct sockaddr_un);
+	res=sendto(ipcsd->fd, data, size, 0, client_address, ssize);
+	if(res==size) return 0;
+	if(ipcsd->udpport){
+		struct sockaddr_in *addr=(struct sockaddr_in *)client_address;
+		UB_LOG(UBL_WARN, "%s:can't send IPC data to %s port=%d\n",
+		       __func__, inet_ntoa(addr->sin_addr),
+		       ntohs(addr->sin_port));
+	}else{
+		struct sockaddr_un *addr=(struct sockaddr_un *)client_address;
+		UB_LOG(UBL_WARN, "%s:can't send IPC data to %s\n",
+		       __func__, addr->sun_path);
+	}
+	return -1;
+}
+
+int cb_ipcsocket_remove_client(cb_ipcserverd_t *ipcsd, struct sockaddr *client_address)
+{
+	return ub_esarray_del_index(ipcsd->ipc_address, find_ipc_client(ipcsd, client_address));
+}
+
+int cb_ipcsocket_server_read(cb_ipcserverd_t *ipcsd, cb_ipcsocket_server_rdcb ipccb, void *cbdata)
+{
+	int32_t res;
+	socklen_t address_length;
+	struct sockaddr_un client_address;
+	uint8_t rbuf[1500];
+	int ri;
+
+	memset(&client_address, 0, sizeof(struct sockaddr_un));
+	address_length=sizeof(struct sockaddr_un);
+	res=recvfrom(ipcsd->fd, rbuf, 1500, 0,
+		     (struct sockaddr *)&(client_address), &address_length);
+	if(res>0){
+		ri=register_ipc_client(ipcsd, (struct sockaddr *)&client_address);
+		if(ri<0) return -1;
+		if(ipccb && ipccb(cbdata, rbuf, res, (struct sockaddr *)&client_address))
+			cb_ipcsocket_remove_client(ipcsd, (struct sockaddr *)&client_address);
+		return 0;
+	}
+
+	if(res==0){
+		UB_LOG(UBL_WARN, "%s:read returns 0, must be disconnected\n", __func__);
+		res=-1;
+	}else{
+		if(errno==ECONNREFUSED){
+			UB_LOG(UBL_WARN, "%s:the other side may not be listening\n", __func__);
+		}else{
+			UB_LOG(UBL_INFO, "%s:res=%d,%s, close fd\n", __func__,
+			       res, strerror(errno));
+		}
+	}
+	cb_ipcsocket_remove_client(ipcsd, (struct sockaddr *)&client_address);
+	return -1;
+}
+
+int cb_ipcsocket_server_write(cb_ipcserverd_t *ipcsd, uint8_t *data, int size,
+			      struct sockaddr *client_address)
+{
+	int en, i;
+	if(client_address)
+		return one_client_write(ipcsd, data, size, client_address);
+
+	en=ub_esarray_ele_nums(ipcsd->ipc_address);
+	for(i=0;i<en;i++){
+		client_address=
+			(struct sockaddr *)ub_esarray_get_ele(ipcsd->ipc_address, i);
+		if(!client_address) continue;
+		if(one_client_write(ipcsd, data, size, client_address)){
+			// decrement 'esarray index' when the item is removed
+			if(!cb_ipcsocket_remove_client(ipcsd, client_address)) i--;
+		}
+	}
+	return 0;
+}
+
+cb_ipcserverd_t *cb_ipcsocket_server_init(char *node_ip, char *suffix, uint16_t port)
+{
+	cb_ipcserverd_t *ipcsd;
+	ipcsd=malloc(sizeof(cb_ipcserverd_t));
+	ub_assert(ipcsd, __func__, "malloc");
+	memset(ipcsd, 0, sizeof(cb_ipcserverd_t));
+	if(port){
+		if(cb_ipcsocket_udp_init(&ipcsd->fd, node_ip, NULL, port)) goto erexit;
+	}else{
+		if(cb_ipcsocket_init(&ipcsd->fd, node_ip, suffix, NULL)) goto erexit;
+		ipcsd->node=strdup(node_ip);
+		ipcsd->suffix=strdup(suffix);
+	}
+	ipcsd->udpport=port;
+	ipcsd->ipc_address=ub_esarray_init(2, sizeof(struct sockaddr_un), MAX_IPC_CLIENTS);
+	return ipcsd;
+erexit:
+	free(ipcsd);
+	return NULL;
+}
+
+void cb_ipcsocket_server_close(cb_ipcserverd_t *ipcsd)
+{
+	if(!ipcsd){
+		UB_LOG(UBL_WARN, "%s:ipcsd==NULL\n", __func__);
+		return;
+	}
+	cb_ipcsocket_close(ipcsd->fd, ipcsd->node, ipcsd->suffix);
+	if(ipcsd->node) free(ipcsd->node);
+	if(ipcsd->suffix) free(ipcsd->suffix);
+	ub_esarray_close(ipcsd->ipc_address);
+	free(ipcsd);
+}
+
+int cb_ipcsocket_getfd(cb_ipcserverd_t *ipcsd)
+{
+	return ipcsd->fd;
 }

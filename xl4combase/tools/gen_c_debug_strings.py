@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 '''
 /*
  * excelfore-gptp - Implementation of gPTP(IEEE 802.1AS)
@@ -31,7 +31,7 @@ call 'item_list' for each selected line
 This function is used to create debug strings from C source codes,
 especially to create a string array from enum definitions.
 
->>> from StringIO import StringIO
+>>> from io import StringIO
 >>> inf=StringIO('''
 ... typedef enum {
 ... 	SAMPLE_ENUM_ITEM0 = 1,
@@ -48,7 +48,7 @@ sample_type_debug[3] = {
 };
 <BLANKLINE>
 """
-
+from __future__ import print_function
 import re
 import sys
 
@@ -88,11 +88,11 @@ class oneItem(object):
             self.items.append("%s%s%s" % (prefix, ro.group(1), suffix))
 
     def print_items(self, first_line, last_line="};"):
-        print first_line
+        print(first_line)
         for i in self.items:
-            print "	%s," % i
-        print last_line
-        print
+            print("	%s," % i)
+        print(last_line)
+        print()
 
 if __name__ == "__main__":
     import doctest

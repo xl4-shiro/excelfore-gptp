@@ -44,7 +44,7 @@ typedef struct ub_logmsg_data{
 } ub_logmsg_data_t;
 
 typedef struct unibase_cstd {
-	bool locked;
+	int locked;
 	bool threadding;
 	unibase_cb_set_t cbset;
 	ub_logmsg_data_t logmsgd[MAX_LOGMSG_CATEGORIES];

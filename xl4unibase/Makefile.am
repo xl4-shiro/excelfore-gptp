@@ -19,7 +19,7 @@
 # <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
 #
 PACKAGENAME=xl4unibase
-VERSION=1.0.1
+VERSION=1.1.0
 DESCRIPTION=Excelfore universal base library
 lib_LTLIBRARIES = libx4unibase.la
 libx4unibase_la_SOURCES = \

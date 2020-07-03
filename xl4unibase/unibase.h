@@ -149,6 +149,14 @@ static inline void ub_assert(bool cond, const char *mes1, const char *mes2)
 }
 
 /**
+ * @brief allocate by calling malloc, abort program if it fails
+ * @param mes	printing message when it fails
+ * @param size	size in byte to allocate
+ * @return allocated memory pointer, the contents of memory is cleared to zero
+ */
+void *ub_malloc_or_die(const char *mes, int size);
+
+/**
  * @brief get 64-bit REALTIME clock value
  * @return clock value
  */

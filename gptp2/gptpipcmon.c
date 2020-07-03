@@ -322,6 +322,9 @@ int main(int argc, char *argv[])
 			if(ipc_reconnect(&ipctd, &ipcrun)) return -1;
 		}
 	}
-	if(ipcrun) gptpipc_close(&ipctd);
+	if(ipcrun) {
+		send_ipc_request(ipctd.ipcfd, 0, 0, GPTPIPC_CMD_DISCONNECT);
+		gptpipc_close(&ipctd);
+	}
 	return 0;
 }

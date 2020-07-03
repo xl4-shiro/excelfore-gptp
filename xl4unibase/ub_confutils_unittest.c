@@ -36,6 +36,8 @@ static void create_conf_file(void)
 	fwrite(astr, 1, strlen(astr), fp);
 	astr="CONF_TEST_INT2 12 # comment post value\n";
 	fwrite(astr, 1, strlen(astr), fp);
+	astr="\n"; // empty line
+	fwrite(astr, 1, strlen(astr), fp);
 	astr="# this is a comment line\n";
 	fwrite(astr, 1, strlen(astr), fp);
 	astr="CONF_TEST_HEXINT1 0x1000000b\n";

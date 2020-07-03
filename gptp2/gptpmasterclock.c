@@ -31,6 +31,7 @@ typedef struct gptp_master_clock_data{
 	gptp_master_clock_shm_t *shm;
 	PTPFD_TYPE *ptpfds;
 	int suppress_msg;
+	int ref_counter;
 	char shmem_name[GPTP_MAX_SIZE_SHARED_MEMNAME];
 } gptp_master_clock_data_t;
 
@@ -88,7 +89,9 @@ int gptpmasterclock_init(const char *shmem_name)
 {
 	int *dnum;
 
-	UB_LOG(UBL_INFO, "%s: gptp2-"XL4PKGVERSION"\n", __func__);
+	gmcd.ref_counter++;
+	UB_LOG(UBL_INFO, "%s: gptp2-"XL4PKGVERSION", ref_counter=%d\n",
+	       __func__, gmcd.ref_counter);
 	if(gmcd.max_domains){
 		UB_LOG(UBL_DEBUG, "%s: already initialized\n", __func__);
 		return 0;
@@ -142,6 +145,7 @@ erexit:
 	}else{
 		gptpmasterclock_close();
 	}
+	gmcd.ref_counter--;
 	return -1;
 }
 
@@ -150,6 +154,9 @@ int gptpmasterclock_close(void)
 	int i;
 	if(!gmcd.max_domains) return -1;
 	if(!gmcd.shm) return -1;
+	gmcd.ref_counter--;
+	UB_LOG(UBL_INFO, "%s: ref_counter=%d\n", __func__, gmcd.ref_counter);
+	if(gmcd.ref_counter>0) return 0;
 	for(i=0;i<gmcd.max_domains;i++){
 		if(!gmcd.shm->gcpp[i].ptpdev[0]) continue;
 		PTPDEV_CLOCK_CLOSE(gmcd.ptpfds[i]);
@@ -279,4 +286,10 @@ uint64_t gptpmasterclock_expand_timestamp(uint32_t timestamp)
 	// dtimes becomes a range of  -2.147 to 2.147 secconds
 	dtimes = (int32_t)(timestamp - ctimes);
 	return ts64+dtimes;
+}
+
+int gptpmasterclock_preinit(void *object)
+{
+	//This API is not needed for platforms that support shared memory.
+	return 0;
 }

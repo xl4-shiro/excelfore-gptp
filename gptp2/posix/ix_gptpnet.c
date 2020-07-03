@@ -27,7 +27,6 @@
 
 
 #define GPTPNET_FRAME_SIZE (GPTP_MAX_PACKET_SIZE+sizeof(CB_ETHHDR_T))
-#define GPTPD_IPC_MAX_CONNECTIONS 8
 
 extern char *PTPMsgType_debug[];
 
@@ -52,17 +51,15 @@ typedef struct netdevice {
 
 struct gptpnet_data {
 	gptpnet_cb_t cb_func;
+	cb_ipcsocket_server_rdcb ipc_cb;
 	void *cb_data;
 	int num_netdevs;
 	netdevice_t *netdevices;
 	int netlinkfd;
 	int64_t event_ts64;
-	int ipcfd;
-	struct sockaddr_un ipc_address[GPTPD_IPC_MAX_CONNECTIONS];
+	cb_ipcserverd_t *ipcsd;
 	int64_t next_tout64;
 };
-
-#include "ix_gptpnet_common.c"
 
 static int netlink_init(int *fd)
 {
@@ -359,6 +356,7 @@ static int gptpnet_catch_event(gptpnet_data_t *gpnet)
 	int res=0;
 	int i;
 	static int64_t last_ts64=0;
+	int ipcfd=cb_ipcsocket_getfd(gpnet->ipcsd);
 
 	FD_ZERO(&rfds);
 	for(i=0;i<gpnet->num_netdevs;i++){
@@ -369,9 +367,9 @@ static int gptpnet_catch_event(gptpnet_data_t *gpnet)
 		FD_SET(gpnet->netlinkfd, &rfds);
 		maxfd=UB_MAX(maxfd, gpnet->netlinkfd);
 	}
-	if(gpnet->ipcfd){
-		FD_SET(gpnet->ipcfd, &rfds);
-		maxfd=UB_MAX(maxfd, gpnet->ipcfd);
+	if(ipcfd){
+		FD_SET(ipcfd, &rfds);
+		maxfd=UB_MAX(maxfd, ipcfd);
 	}
 
 	ts64=ub_mt_gettime64();
@@ -418,19 +416,36 @@ static int gptpnet_catch_event(gptpnet_data_t *gpnet)
 			while(!read_netdev_event(gpnet, i)) ;
 		}
 	}
-	if(FD_ISSET(gpnet->ipcfd, &rfds)){
-		res|=read_ipc_event(gpnet);
+	if(FD_ISSET(ipcfd, &rfds)){
+		res|=cb_ipcsocket_server_read(gpnet->ipcsd, gpnet->ipc_cb, gpnet->cb_data);
 	}
 	return res;
 }
 
-gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, void *cb_data, char *netdev[],
-			     int *num_ports, char *master_ptpdev)
+int gptpnet_ipc_notice(gptpnet_data_t *gpnet, gptpipc_gptpd_data_t *ipcdata, int size)
+{
+	return cb_ipcsocket_server_write(gpnet->ipcsd, (uint8_t*)ipcdata, size, NULL);
+}
+
+int gptpnet_ipc_respond(gptpnet_data_t *gpnet, struct sockaddr *addr,
+			gptpipc_gptpd_data_t *ipcdata, int size)
+{
+	return cb_ipcsocket_server_write(gpnet->ipcsd, (uint8_t*)ipcdata, size, addr);
+}
+
+int gptpnet_ipc_client_remove(gptpnet_data_t *gpnet, struct sockaddr *addr)
+{
+	return cb_ipcsocket_remove_client(gpnet->ipcsd, addr);
+}
+
+gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, cb_ipcsocket_server_rdcb ipc_cb,
+			     void *cb_data, char *netdev[], int *num_ports, char *master_ptpdev)
 {
 	gptpnet_data_t *gpnet;
 	int i;
 	int first_devwptp=-1;
 	int res;
+	uint16_t ipc_udpport;
 
 	for(i=0;netdev && netdev[i] && netdev[i][0];i++) ;
 	if(i==0){
@@ -487,9 +502,14 @@ gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, void *cb_data, char *netdev[]
 		       gpnet->netdevices[0].nlstatus.ptpdev);
 	}
 	gpnet->cb_func=cb_func;
+	gpnet->ipc_cb=ipc_cb;
 	gpnet->cb_data=cb_data;
 	gpnet->event_ts64=ub_mt_gettime64();
-	gptpnet_ipc_init(gpnet);
+	ipc_udpport=gptpconf_get_intitem(CONF_IPC_UDP_PORT);
+	if(ipc_udpport)
+		gpnet->ipcsd=cb_ipcsocket_server_init(NULL, NULL, ipc_udpport);
+	else
+		gpnet->ipcsd=cb_ipcsocket_server_init(GPTP2D_IPC_CB_SOCKET_NODE, "", 0);
 	return gpnet;
 }
 
@@ -514,7 +534,7 @@ int gptpnet_close(gptpnet_data_t *gpnet)
 		}
 	}
 	if(gpnet->netlinkfd) close(gpnet->netlinkfd);
-	gptpnet_ipc_close(gpnet);
+	cb_ipcsocket_server_close(gpnet->ipcsd);
 	free(gpnet->netdevices);
 	free(gpnet);
 	return 0;

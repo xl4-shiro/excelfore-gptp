@@ -41,11 +41,13 @@ typedef ub_bytearray6_t ub_macaddr_t; //!< 6-byte binary array is used for MAC A
 
 /**
  * @brief dump out data in hex format to the console
+ * @param console	select output to consol
+ * @param debug	select output to debug memory
  * @param buf	reference to the data buffer
  * @param size	size of the data to be dumped.
  * @param addr	offset address at the top of the data
  */
-void ub_hexdump(unsigned char *buf, int size, int addr);
+void ub_hexdump(bool console, bool debug, unsigned char *buf, int size, int addr);
 
 /**
  * @brief convert a binary type mac address to a string type mac

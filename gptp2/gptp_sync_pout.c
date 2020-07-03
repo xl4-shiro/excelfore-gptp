@@ -164,7 +164,7 @@ static int lpout(int setup, int wakeup, int interval, int portn)
 		while(ts64>wakeup){
 			ts64-=wakeup;
 			memset(&ts2,0,sizeof(ts2));
-			UB_LOG(UBL_DEBUGV, "sleep for %ldnsec\n",ts64);
+			UB_LOG(UBL_DEBUGV, "sleep for %"PRIi64"nsec\n",ts64);
 			UB_NSEC2TS(ts64, ts1);
 			if(clock_nanosleep(CLOCK_REALTIME,0,&ts1,&ts2)){
 				UB_LOG(UBL_INFO, "sleep failed %s\n", strerror(errno));

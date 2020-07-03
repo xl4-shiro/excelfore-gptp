@@ -38,7 +38,6 @@ typedef enum {
 	GPTPNET_EVENT_DEVDOWN,
 	GPTPNET_EVENT_RECV,
 	GPTPNET_EVENT_TXTS,
-	GPTPNET_EVENT_IPC,
 } gptpnet_event_t;
 
 /*
@@ -69,8 +68,8 @@ typedef struct event_data_ipc {
 	gptpipc_client_req_data_t reqdata;
 } event_data_ipc_t;
 
-gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, void *cb_data, char *netdev[],
-			     int *num_ports, char *master_ptpdev);
+gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, cb_ipcsocket_server_rdcb ipc_cb,
+			     void *cb_data, char *netdev[], int *num_ports, char *master_ptpdev);
 int gptpnet_activate(gptpnet_data_t *gpnet);
 int gptpnet_close(gptpnet_data_t *gpnet);
 int gptpnet_eventloop(gptpnet_data_t *gpnet, int *stoploop);
@@ -103,8 +102,9 @@ void gptpnet_create_clockid(gptpnet_data_t *gpnet, uint8_t *id,
 uint64_t gptpnet_txtslost_time(gptpnet_data_t *gpnet, int ndevIndex);
 int gptpnet_get_nlstatus(gptpnet_data_t *gpnet, int ndevIndex, event_data_netlink_t *nlstatus);
 int gptpnet_ipc_notice(gptpnet_data_t *gpnet, gptpipc_gptpd_data_t *ipcdata, int size);
-int gptpnet_ipc_respond(gptpnet_data_t *gpnet, int client_index,
+int gptpnet_ipc_respond(gptpnet_data_t *gpnet, struct sockaddr *addr,
 			gptpipc_gptpd_data_t *ipcdata, int size);
+int gptpnet_ipc_client_remove(gptpnet_data_t *gpnet, struct sockaddr *addr);
 
 /**
  * @brief make the next timeout happen in toutns (nsec)

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 '''
 /*
  * excelfore-gptp - Implementation of gPTP(IEEE 802.1AS)
@@ -21,8 +21,9 @@
  * <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
  */
 '''
+from __future__ import print_function
 import sys
-import StringIO
+from io import StringIO
 
 class read_sm_list(object):
     def __init__(self, fname="sm_list.txt"):
@@ -40,7 +41,7 @@ class read_sm_list(object):
                 if line.find("--- END ---")==0: break
                 line=line.rstrip()
                 self.add_itemline(line)
-                
+
     def add_itemline(self,line):
         if line.rfind('\\')==len(line)-1:
             self.itemline+=line[:len(line)-1]
@@ -71,7 +72,7 @@ class one_init(object):
         self.replace_text("__init_args", self.dec_init_function)
         self.replace_text("__init_function", self.init_function)
         self.replace_text("__close_function", self.close_function)
-        
+
     def mkvitems(self, v):
         if v=="gptpnet_data_t":
             self.gvars.append((v,"gpnetd"))
@@ -95,7 +96,7 @@ class one_init(object):
                 lastu=0
         if len(ss)>0: name+=ss
         self.gvars.append((ov,name))
-                              
+
     def gen_sm_name(self):
         name=""
         cc=False
@@ -116,12 +117,12 @@ class one_init(object):
                 lastu=0
         if len(ss)>0: name+='_'+ss
         return name
-    
+
     def output_text(self):
         self.output_text=self.temp_text.replace("SM_MACHINE", self.sm_name)
-        
+
     def replace_text(self, mark, ofunc):
-        inf=StringIO.StringIO(self.output_text)
+        inf=StringIO(self.output_text)
         ot=""
         while True:
             line=inf.readline()
@@ -132,7 +133,7 @@ class one_init(object):
                 ot+=ofunc()
         inf.close()
         self.output_text=ot
-        
+
     def create_enum(self):
         ot=""
         for i in self.states: ot+="\t%s,\n" % i
@@ -152,7 +153,7 @@ class one_init(object):
 
     def allstate_condition(self):
         return "\treturn %s;\n" % self.states[1]
-        
+
     def static_functions(self):
         ot=""
         for i in self.states[1:len(self.states)-1]:
@@ -246,7 +247,7 @@ class one_init(object):
 if __name__ == '__main__':
     header_mode=False
     if len(sys.argv)<2:
-        print "sm_create.py number [h] -- number for template of the item"
+        print("sm_create.py number [h] -- number for template of the item")
     if len(sys.argv)>2:
         if sys.argv[2]=="h": header_mode=True
     item_num=int(sys.argv[1])
@@ -259,6 +260,6 @@ if __name__ == '__main__':
     for sm in sm_list.sm_items[si:sl]:
         onesm=one_init(sm)
         if header_mode:
-            print onesm.header()
+            print(onesm.header())
         else:
-            print onesm.output_text
+            print(onesm.output_text)

@@ -19,7 +19,7 @@
 # <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
 #
 PACKAGENAME=xl4combase
-VERSION=1.0.1
+VERSION=1.1.0
 DESCRIPTION=Excelfore communication base library
 lib_LTLIBRARIES = libx4combase.la
 libx4combase_la_SOURCES = combase.h
@@ -94,7 +94,7 @@ libx4combase_la_LIBADD += -lrt
 endif
 
 check_PROGRAMS = cb_ethernet_ovip_unittest cb_timer_unittest cb_thread_waitpoint_unittest \
-cb_noipcshmem_unittest
+cb_noipcshmem_unittest cb_ipcsock_unittest
 AM_MAKEFLAGS = CMOCKA_TEST_ABORT='1'
 
 cb_ethernet_ovip_unittest_SOURCES = cb_ethernet_ovip_unittest.c
@@ -112,6 +112,10 @@ cb_thread_waitpoint_unittest_LDFLAGS = $(AM_LDFLAGS) -lx4unibase -lcmocka -lpthr
 cb_noipcshmem_unittest_SOURCE = cb_noipcshmem_unittest.c
 cb_noipcshmem_unittest_LDADD = libx4combase.la
 cb_noipcshmem_unittest_LDFLAGS = $(AM_LDFLAGS) -lx4unibase -lcmocka -lpthread
+
+cb_ipcsock_unittest_SOURCE = cb_ipcsock_unittest.c
+cb_ipcsock_unittest_LDADD = libx4combase.la
+cb_ipcsock_unittest_LDFLAGS = $(AM_LDFLAGS) -lx4unibase -lcmocka -lpthread
 
 TESTS = $(check_PROGRAMS)
 
@@ -185,5 +189,5 @@ uninstall-tools:
 
 python_PYTHON = tools/gen_c_debug_strings.py \
 		tools/__init__.py
-pythondir=$(prefix)/lib/python2.7/dist-packages/$(PACKAGENAME)
+pythondir=$(libdir)/python$(PYTHON_VERSION)/dist-packages/$(PACKAGENAME)
 py_compile = -c :

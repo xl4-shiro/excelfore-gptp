@@ -19,7 +19,7 @@
 # <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
 #
 PACKAGENAME=xl4gptp
-VERSION=1.0.1
+VERSION=1.1.0
 DESCRIPTION=Excelfore gptp daemon and libary
 
 ACLOCAL_AMFLAGS = -I m4
@@ -87,7 +87,6 @@ if LINUX_PTPCLOCK
   GPTP2_SOURCES += posix/ix_ll_gptpsupport.c
   GPTP2_SOURCES += posix/ix_gptpnet.c posix/ix_gptpclock.c
   check_PROGRAMS += ix_gptpclock_unittest ix_gptpnet_unittest
-posix/ix_gptpnet.c: posix/ix_gptpnet_common.c
 
   ix_gptpnet_unittest_SOURCES = posix/ix_gptpnet_unittest.c $(GPTP2_SOURCES)
   ix_gptpnet_unittest_CFLAGS = $(AM_CFLAGS)

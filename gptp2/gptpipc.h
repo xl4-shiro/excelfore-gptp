@@ -55,6 +55,7 @@ typedef enum {
 	GPTPIPC_CMD_REQ_STAT_INFO,
 	GPTPIPC_CMD_REQ_STAT_INFO_RESET,
 	GPTPIPC_CMD_REG_ABNORMAL_EVENT,
+	GPTPIPC_CMD_DISCONNECT,
 } gptp_ipc_command_t;
 
 #define GPTPIPC_EXT_SCRIPT "gptpipc_extscript"

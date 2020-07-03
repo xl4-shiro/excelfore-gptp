@@ -21,6 +21,13 @@
 #ifndef __GPTPMAN_H_
 #define __GPTPMAN_H_
 
+#ifdef GHINTEGRITY
+extern Semaphore g_gptpd_ready_semaphore;
+#define GPTP_READY_NOTICE CB_SEM_POST(&g_gptpd_ready_semaphore);
+#else
+#define GPTP_READY_NOTICE
+#endif
+
 typedef struct gptpman_data gptpman_data_t;
 
 int gptpman_run(char *netdevs[], int max_ports, int max_domains, char *inittm);

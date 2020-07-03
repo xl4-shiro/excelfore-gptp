@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 '''
 /*
  * excelfore-gptp - Implementation of gPTP(IEEE 802.1AS)
@@ -21,6 +21,7 @@
  * <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
  */
 '''
+from __future__ import print_function
 import sys, os, re
 
 class oneEnumItem(object):
@@ -64,20 +65,20 @@ class oneEnumItem(object):
         return self.print_items(None, None, False);
 
     def print_items(self, first_line, last_line="};", pr=True):
-        if pr: print first_line
+        if pr: print(first_line)
         j=0
         for i in self.items:
             if i[1]!=-1 and j!=i[1]:
                 if pr:
-                    for k in range(i[1]-j): print "	\"\","
+                    for k in range(i[1]-j): print("	\"\",")
                 j=i[1]+1
             else:
                 j=j+1
-            if pr: print "	%s," % i[0]
-        if pr: print last_line
+            if pr: print("	%s," % i[0])
+        if pr: print(last_line)
         if pr: print
         return j
-        
+
 if __name__ == '__main__':
     header_mode=False
     if len(sys.argv)>1 and sys.argv[1]=="h":
@@ -91,13 +92,12 @@ if __name__ == '__main__':
                  ["enum", "PTPPortState", "char *PTPPortState_debug"]],
     ]
 
-    print "/* Automatically generated code. Don't edit this file. */"
-    print
+    print("/* Automatically generated code. Don't edit this file. */")
+    print()
 
     for item in items_list:
         if header_mode:
-            print "extern %s[];" % item[2][2]
+            print("extern %s[];" % item[2][2])
             continue
         a=oneEnumItem(item[0], item[2][0], item[2][1])
         a.print_items("%s[%d] = {" % (item[2][2],a.item_num))
-        

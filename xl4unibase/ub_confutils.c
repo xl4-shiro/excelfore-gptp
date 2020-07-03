@@ -24,27 +24,29 @@
 #include <fcntl.h>
 #include "ub_confutils.h"
 
-static char *conf_readline(FILE *inf)
+#define MAX_CHARS_PER_LINE 1024
+static int conf_readline(FILE *inf, char *line)
 {
 	char a;
-	static char line[128];
 	int res;
 	int rp=0;
+
+	if(feof(inf)) return 0;
 	while((res=fread(&a, 1, 1, inf))){
 		if(res<0){
+			if(feof(inf)) return 0;
 			UB_LOG(UBL_WARN,"%s:error to read config file\n", __func__);
-			return NULL;
+			return -1;
 		}
 		if(a=='\n') break;
 		line[rp++]=a;
-		if(rp>=sizeof(line)-1){
+		if(rp>=MAX_CHARS_PER_LINE-1){
 			UB_LOG(UBL_WARN,"%s:too long line\n", __func__);
-			return NULL;
+			return -1;
 		}
 	}
-	line[rp]=0;
-	if(res>0 || strlen(line)>0) return line;
-	return NULL;
+	line[rp++]=0;
+	return rp;
 }
 
 static char *find_next_wspace(char *sp)
@@ -70,27 +72,25 @@ static char *find_next_nwspace(char *sp)
 	return NULL;
 }
 
-static uint8_t *get_byte_array(char *sp)
+static int get_byte_array(char *sp, uint8_t *b)
 {
 	int i;
 	char *np;
-	static uint8_t b[16];
 	memset(b, 0, 16);
 	for(i=0;i<16;i++){
 		b[i]=strtol(sp, &np, 16);
-		if(*np!=':') return b;
+		if(*np!=':') return 0;
 		sp=np+1;
 	}
-	return NULL;
+	return -1;
 }
 
 static int config_set_oneitem(char *itemp, char *sp, ub_set_item_cb_t set_item)
 {
 	int64_t v;
-	if(strchr(sp,':')){
-		uint8_t *p;
-		p=get_byte_array(sp);
-		if(p) return set_item(itemp, p);
+	uint8_t p[16];
+	if(!strchr(sp,',') && strchr(sp,':')){
+		if(!get_byte_array(sp, p)) return set_item(itemp, p);
 		return -1;
 	}
 	if(sp[0]=='"'){
@@ -106,15 +106,16 @@ static int config_set_oneitem(char *itemp, char *sp, ub_set_item_cb_t set_item)
 int ub_read_config_file(char *fname, ub_set_item_cb_t set_item)
 {
 	FILE *inf;
-	char *line;
+	char line[MAX_CHARS_PER_LINE];
 	char *sp,*ep, *itemp;
+	int res;
 	//int item;
 	inf=fopen(fname, "r");
 	if(!inf){
 		UB_LOG(UBL_WARN,"%s:can't read config file:%s\n", __func__, fname);
 		return -1;
 	}
-	while((line=conf_readline(inf))){
+	while((res=conf_readline(inf, line))>0){
 		sp=find_next_nwspace(line);
 		if(!sp) continue;
 		if(sp[0]=='#') continue;
@@ -134,5 +135,5 @@ int ub_read_config_file(char *fname, ub_set_item_cb_t set_item)
 		}
 	}
 	fclose(inf);
-	return 0;
+	return res;
 }

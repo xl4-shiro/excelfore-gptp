@@ -80,17 +80,19 @@ static MDSyncReceive *setMDSyncReceive(md_sync_receive_data_t *sm)
 			(uint64_t)ntohl(RCVD_FOLLOWUP_PTR->preciseOriginTimestamp.nanoseconds_nl);
 
 		sm->mdSyncReceive.rateRatio =
-			1.0 + ldexp((double)ntohl(RCVD_FOLLOWUP_PTR->
+			1.0 + ldexp((int32_t)ntohl(RCVD_FOLLOWUP_PTR->
 						  FUpInfoTLV.cumulativeScaledRateOffset_nl),
 				    -41);
 		sm->mdSyncReceive.gmTimeBaseIndicator =
 			ntohs(RCVD_FOLLOWUP_PTR->FUpInfoTLV.gmTimeBaseIndicator_ns);
 		sm->mdSyncReceive.lastGmPhaseChange.nsec =
-			ntohl(RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll);
+			(int64_t)UB_NTOHLL(
+				RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll);
 		sm->mdSyncReceive.lastGmPhaseChange.nsec_msb =
 			RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll<0?-1:0;
 		sm->mdSyncReceive.lastGmFreqChange =
-			ldexp(ntohl(RCVD_FOLLOWUP_PTR->FUpInfoTLV.scaledLastGmFreqChange_nl),
+			ldexp((int32_t)ntohl(
+				      RCVD_FOLLOWUP_PTR->FUpInfoTLV.scaledLastGmFreqChange_nl),
 			      -41);
 	}else{
 		sm->mdSyncReceive.preciseOriginTimestamp.seconds.lsb =
@@ -101,17 +103,19 @@ static MDSyncReceive *setMDSyncReceive(md_sync_receive_data_t *sm)
 			(uint64_t)ntohl(RCVD_SYNC_ONESETP_PTR->originTimestamp.nanoseconds_nl);
 
 		sm->mdSyncReceive.rateRatio =
-			1.0 + ldexp((double)ntohl(RCVD_SYNC_ONESETP_PTR->
+			1.0 + ldexp((int32_t)ntohl(RCVD_SYNC_ONESETP_PTR->
 						  FUpInfoTLV.cumulativeScaledRateOffset_nl),
 				    -41);
 		sm->mdSyncReceive.gmTimeBaseIndicator =
 			ntohs(RCVD_SYNC_ONESETP_PTR->FUpInfoTLV.gmTimeBaseIndicator_ns);
 		sm->mdSyncReceive.lastGmPhaseChange.nsec =
-			ntohl(RCVD_SYNC_ONESETP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll);
+			(int64_t)UB_NTOHLL(
+				RCVD_SYNC_ONESETP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll);
 		sm->mdSyncReceive.lastGmPhaseChange.nsec_msb =
 			RCVD_SYNC_ONESETP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll<0?-1:0;
 		sm->mdSyncReceive.lastGmFreqChange =
-			ldexp(ntohl(RCVD_SYNC_ONESETP_PTR->FUpInfoTLV.scaledLastGmFreqChange_nl),
+			ldexp((int32_t)
+			      ntohl(RCVD_SYNC_ONESETP_PTR->FUpInfoTLV.scaledLastGmFreqChange_nl),
 			      -41);
 	}
 

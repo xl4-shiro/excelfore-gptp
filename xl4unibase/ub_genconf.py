@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 '''
 /*
  * excelfore-gptp - Implementation of gPTP(IEEE 802.1AS)
@@ -21,6 +21,7 @@
  * <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
  */
 '''
+from __future__ import print_function
 import re
 import sys
 import getopt
@@ -144,12 +145,12 @@ class DefaultHeader(object):
         outf.write("\n")
         outf.write("int32_t %sconf_get_intitem(%s_config_item_t item)\n" % (pf, pf))
         outf.write("{\n")
-	outf.write("\treturn *((int32_t *)%sconf_get_item(item));\n" % pf)
+        outf.write("\treturn *((int32_t *)%sconf_get_item(item));\n" % pf)
         outf.write("}\n")
         outf.write("\n")
         outf.write("int64_t %sconf_get_lintitem(%s_config_item_t item)\n" % (pf, pf))
         outf.write("{\n")
-	outf.write("\treturn *((int64_t *)%sconf_get_item(item));\n" % pf)
+        outf.write("\treturn *((int64_t *)%sconf_get_item(item));\n" % pf)
         outf.write("}\n")
         outf.write("\n")
 
@@ -285,13 +286,13 @@ def print_unittest_head(outf, pf, ifile, hfile):
 
 def print_usage():
     pname=sys.argv[0][sys.argv[0].rfind('/')+1:]
-    print "%s [options]" % pname
-    print "    -h|--help: this help"
-    print "    -i|--input: input file name"
-    print "    -c|--cfile: output c source file name"
-    print "    -d|--hfile: output header file name"
-    print "    -v|--vfile: output values test file name"
-    print "    -e|--exth: extra header files(comma separated list)"
+    print("%s [options]" % pname)
+    print("    -h|--help: this help")
+    print("    -i|--input: input file name")
+    print("    -c|--cfile: output c source file name")
+    print("    -d|--hfile: output header file name")
+    print("    -v|--vfile: output values test file name")
+    print("    -e|--exth: extra header files(comma separated list)")
 
 def set_options():
     try:
@@ -300,7 +301,7 @@ def set_options():
                                     "vfile=", "prefix=", "exth="])
     except getopt.GetoptError as err:
         # print help information and exit:
-        print str(err)  # will print something like "option -a not recognized"
+        print(str(err))  # will print something like "option -a not recognized"
         print_usage()
         sys.exit(1)
     res={'input':None, 'prefix':None, 'exth':None, 'cfile':None, 'hfile':None, 'vfile':None}
@@ -323,7 +324,7 @@ def set_options():
         else:
             assert False, "unhandled option"
     if not res['prefix']:
-        print "need 'prefix' option"
+        print("need 'prefix' option")
         print_usage()
         sys.exit(1)
     return res

@@ -29,21 +29,22 @@
 #include <ctype.h>
 #include <string.h>
 
-void ub_hexdump(unsigned char *buf, int size, int addr)
+void ub_hexdump(bool console, bool debug, unsigned char *buf, int size, int addr)
 {
 	int i;
 	int p=0;
+	if(!console && !debug) return;
 	while(size){
-		ub_console_print("%08X - ", addr);
-		for(i=addr&0xf;i>0;i--) ub_console_print("   ");
-		if((addr&0xf)>0x8) ub_console_print(" ");
+		ub_console_debug_select_print(console, debug, "%08X - ", addr);
+		for(i=addr&0xf;i>0;i--) ub_console_debug_select_print(console, debug, "   ");
+		if((addr&0xf)>0x8) ub_console_debug_select_print(console, debug, " ");
 		for(i=addr&0xf;i<0x10;i++){
-			if(i==0x8) ub_console_print(" ");
-			ub_console_print("%02x ", buf[p++]);
+			if(i==0x8) ub_console_debug_select_print(console, debug, " ");
+			ub_console_debug_select_print(console, debug, "%02x ", buf[p++]);
 			if(! --size) break;
 		}
 		addr=(addr+0x10)&~0xf;
-		ub_console_print("\n");
+		ub_console_debug_select_print(console, debug, "\n");
 	}
 }
 

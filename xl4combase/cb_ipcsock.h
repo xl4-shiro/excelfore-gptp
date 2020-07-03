@@ -72,5 +72,69 @@ int cb_ipcsocket_udp_init(int *ipcfd, char *own_ip, char *server_ip, int server_
  */
 int cb_ipcsocket_close(int ipcfd, char *node, char *suffix);
 
+/*
+ * this number of IPC clients can be allowed to connect.
+ * 2-connection memory data is expanded by increasing of connections,
+ * and when the disconnection is detected the data is removed and freed.
+ */
+#define MAX_IPC_CLIENTS 16
+typedef struct cb_ipcserverd cb_ipcserverd_t;
+
+/**
+ * @brief initialize the server mode ipc socket
+ * @return the data handle
+ * @param node_ip	unix domain socket file node name OR udp socket port IP address
+ * @param suffix	suffix part of file node, set "" for non suffix
+ * @param port	the local port number for udp mode connection. Set 0 for unix domain socket.
+ */
+cb_ipcserverd_t *cb_ipcsocket_server_init(char *node_ip, char *suffix, uint16_t port);
+
+/**
+ * @brief close the server mode ipc socket
+ * @param ipcsd	the data handle
+ */
+void cb_ipcsocket_server_close(cb_ipcserverd_t *ipcsd);
+
+/**
+ * @brief send ipc data to a specific client_address or internally managed IPC clients
+ * @return 0 on success, -1 on error
+ * @param ipcsd	the data handle
+ * @param data	send data
+ * @param size	send data size
+ * @param client_address	if set, the data is sent to this client_address,
+ * 	if NULL, the data is sent to all IPC cients
+ * 	depends on 'ipcsd->udpport', client_address is 'sockaddr_in' or 'sockaddr_un'
+ */
+int cb_ipcsocket_server_write(cb_ipcserverd_t *ipcsd, uint8_t *data, int size,
+			      struct sockaddr *client_address);
+
+/**
+ * @brief callback function to be called from 'cb_ipcsocket_server_read'
+ * @note  if the callback returns non-zero, the connection is closed.
+ */
+typedef int(* cb_ipcsocket_server_rdcb)(void *cbdata, uint8_t *rdata,
+					int size, struct sockaddr *addr);
+
+/**
+ * @brief receive data on the IPC socket.
+ * @return 0 on success, -1 on error
+ * @param ipcsd	the data handle
+ * @param ipccb	a callback function to be called with the read data
+ * @param cbdata	data to be passed with the callback
+ * @note this may block the process.  the caller functin must check events not to be blocked
+ */
+int cb_ipcsocket_server_read(cb_ipcserverd_t *ipcsd,
+			     cb_ipcsocket_server_rdcb ipccb, void *cbdata);
+
+/**
+ * @brief return ipc socket fd
+ */
+int cb_ipcsocket_getfd(cb_ipcserverd_t *ipcsd);
+
+/**
+ * @brief remove IPC client from the managed list
+ */
+int cb_ipcsocket_remove_client(cb_ipcserverd_t *ipcsd, struct sockaddr *client_address);
+
 #endif
 /** @}*/

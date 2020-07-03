@@ -47,7 +47,7 @@ void unibase_init(unibase_init_para_t *ub_init_para)
 		printf("need 'ub_init_para'\n");
 		abort();
 	}
-	if(ubcd.locked) return;
+	if(ubcd.locked++) return;
 	memcpy(&ubcd.cbset, &ub_init_para->cbset, sizeof(unibase_cb_set_t));
 	if(ubcd.cbset.mutex_init && ubcd.cbset.mutex_close &&
 	   ubcd.cbset.mutex_lock && ubcd.cbset.mutex_unlock) {
@@ -55,7 +55,6 @@ void unibase_init(unibase_init_para_t *ub_init_para)
 		ubcd.gmutex=ubcd.cbset.mutex_init();
 	}
 	ub_log_init(ub_init_para->ub_log_initstr);
-	ubcd.locked=true;
 	if(ubcd.cbset.console_out){
 		ubcd.cbset.console_out(true, "unibase-"XL4PKGVERSION"\n");
 	}
@@ -64,6 +63,7 @@ void unibase_init(unibase_init_para_t *ub_init_para)
 void unibase_close(void)
 {
 	if(!ubcd.locked) return;
+	if(--ubcd.locked>0) return;
 	if(ubcd.threadding)
 		ubcd.cbset.mutex_close(ubcd.gmutex);
 	memset(&ubcd, 0, sizeof(ubcd));
@@ -79,6 +79,15 @@ void ub_abort(const char *mes1, const char *mes2)
 	if(ubcd.cbset.console_out) ubcd.cbset.console_out(true, astr);
 	if(ubcd.cbset.debug_out) ubcd.cbset.debug_out(true, astr);
 	abort();
+}
+
+void *ub_malloc_or_die(const char *mes, int size)
+{
+	void *p;
+	p=malloc(size);
+	if(!p) ub_abort(mes, "malloc failed");
+	memset(p, 0, size);
+	return p;
 }
 
 uint64_t ub_rt_gettime64(void)

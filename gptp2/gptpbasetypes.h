@@ -35,8 +35,10 @@
 
 /**
  * @brief Macro which defines Maximum port number limit for gPTP2.
+ * @note CONF_MAX_PORT_NUMBER can be configured at a runtime,
+ * 	 it must be less than this numumber
  */
-#define MAX_PORT_NUMBER_LIMIT 16
+#define MAX_PORT_NUMBER_LIMIT 33
 
 /**
  * @brief Macro to define maximum path trace.
