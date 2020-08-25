@@ -33,11 +33,11 @@ When xl4unibase and xl4combase are not installed, install them first.
 
 	$ git clone git@github.com:xl4-shiro/xl4unibase.git
 	$ cd xl4unibase
-	$ ./autogetn.sh; cd buid; make install
+	$ ./autogetn.sh; cd buid; ../configure; make install
 
 	$ git clone git@github.com:xl4-shiro/xl4combase.git
 	$ cd xl4combase
-	$ ./autogetn.sh; cd buid; make install
+	$ ./autogetn.sh; cd buid; ../configure; make install
 
 Then, in this gptp2 directory,
 
