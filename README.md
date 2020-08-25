@@ -7,6 +7,7 @@
 + C99 standard level library functions and C compiler functions must be supported to
 build.
 + POSIX library is basically needed.
++ Excelfore unibase(git@github.com:xl4-shiro/xl4unibase.git), Excelfore combase(git@github.com:xl4-shiro/xl4combase.git)
 + cmocka library is needed to run the unit tests.<br/>
   Skipping the unit tests is possible by adding '--disable-unittest' parameter on 'configure'.
 
@@ -28,6 +29,17 @@ event messages.<br/>
      ...
 
 ## Build
+When xl4unibase and xl4combase are not installed, install them first.
+
+	$ git clone git@github.com:xl4-shiro/xl4unibase.git
+	$ cd xl4unibase
+	$ ./autogetn.sh; cd buid; make install
+
+	$ git clone git@github.com:xl4-shiro/xl4combase.git
+	$ cd xl4combase
+	$ ./autogetn.sh; cd buid; make install
+
+Then, in this gptp2 directory,
 
     $ ./autogetn.sh
     $ mkdir build
