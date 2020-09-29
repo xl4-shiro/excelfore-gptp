@@ -144,7 +144,7 @@
 #define DEFAULT_ALLOWED_LOST_RESPONSE 9 // updated from 3 to 9 in 802.1AS-REV
 // 11.5.4 allowedFaults
 #define DEFAULT_ALLOWED_FAULTS 9
-// Table 11-1—Value of neighborPropDelayThresh for various links
+// Table 11-1-Value of neighborPropDelayThresh for various links
 //#define DEFAULT_NEIGHBOR_PROPDELAY_THRESH 800
 #define DEFAULT_NEIGHBOR_PROPDELAY_THRESH 40000 // for Intel i218,i219
 
@@ -181,7 +181,7 @@
 #define DEFAULT_TSN_SCHEDULE_CYCLETIME 10000000 // 10msec
 
 // a file name to save debug log memory at the end of gptp2d run
-#define DEFAULT_DEBUGLOG_MEMORY_FILE "/tmp/gptp2d_debugmem.log"
+#define DEFAULT_DEBUGLOG_MEMORY_FILE "/tmp/gptp2d_debugmem.log" // max_length=64
 
 // size of the debug log memory. if this is '0', no debug log memory is used
 #define DEFAULT_DEBUGLOG_MEMORY_SIZE 64 // Kbytes
@@ -196,7 +196,7 @@
 // for nomal use, set "". then it uses GPTP_MASTER_CLOCK_SHARED_MEM as hardcoded value.
 // when the over ip mode is used, multiple gptp2d can be run.
 // Only in such case, the shared mem name must be changed.
-#define DEFAULT_MASTER_CLOCK_SHARED_MEM ""
+#define DEFAULT_MASTER_CLOCK_SHARED_MEM "" // max_length=32
 
 // for the over ip mode testing, this clock rate(ppb unit) change is applied.
 #define DEFAULT_PTPVFD_CLOCK_RATE 0
@@ -219,5 +219,11 @@
 // can correct the rate when the previous GM has a bad rate.
 #define DEFAULT_RESET_FREQADJ_BECOMEGM 0
 
-#define DEFAULT_RCAR_TIV_OFFSET 0
+// GHS INTEGRITY ptp clock frequency increasement value, this value varies in the hardware.
+// Refer to the INTEGRITY BSP and configure the gptp daemon to use the correct value.
+#define DEFAULT_INTEGRITY_FREQ_INCR 0xFFFFFFFFFFFFFFFF
+
+// GHS INTEGRITY ptp clock name, this value may vary in the OS version and hardware.
+// Refer to the INTEGRITY BSP and configure the gptp daemon to use the correct value.
+#define DEFAULT_INTEGRITY_CLOCK_NAME "IOD_AVB_PTP_Clock" // max_length=32
 #endif
