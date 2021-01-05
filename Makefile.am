@@ -19,7 +19,7 @@
 # <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
 #
 PACKAGENAME=xl4gptp
-VERSION=1.1.0
+VERSION=1.1.1
 DESCRIPTION=Excelfore gptp daemon and libary
 
 ACLOCAL_AMFLAGS = -I m4
@@ -31,10 +31,10 @@ AM_CFLAGS += -I$(srcdir)/..
 AM_LDFLAGS = -L../xl4unibase/.libs -L../xl4combase/.libs
 UB_GENCONF = $(srcdir)/../xl4unibase/ub_genconf.py
 DOC_DIR = $(abs_srcdir)/../xl4unibase/doc
-else
-UB_GENCONF = $(datadir)/xl4unibase/ub_genconf.py
-DOC_DIR = $(datadir)/xl4unibase
-endif
+else # BUILD_IN_STPL
+UB_GENCONF = $(STAGING_DIR_HOST)$(datadir)/xl4unibase/ub_genconf.py
+DOC_DIR = $(STAGING_DIR_HOST)$(datadir)/xl4unibase
+endif # BUILD_IN_STPL
 
 pkgincludedir=$(includedir)/xl4tsn/gptp2
 docdir=${datarootdir}/doc/xl4tsn/gptp2
@@ -189,11 +189,11 @@ $(TARGET_PDF): $(DOC_LATEC_REFMAN)
 $(DOC_LATEC_REFMAN): $(srcdir)/xl4_header.tex $(DOC_HTML_INDEX)
 	make -C $(srcdir)/docoutput/latex
 
-docoutput/html $(DOC_HTML_INDEX): $(pkginclude_HEADERS) README.md xl4gptp_doxygen.conf
+$(srcdir)/docoutput/html $(DOC_HTML_INDEX): $(pkginclude_HEADERS) README.md xl4gptp_doxygen.conf
 	cd $(srcdir); PROJECT_NAME=$(PACKAGENAME) PROJECT_VERSION=$(VERSION)-`date +%Y%m%d` \
 	DOXYGEN_INPUT="$(pkginclude_HEADERS) README.md" doxygen $(PACKAGENAME)_doxygen.conf
 
-install-html-local: docoutput/html $(DOC_HTML_INDEX)
+install-html-local: $(srcdir)/docoutput/html $(DOC_HTML_INDEX)
 	install -d $(DESTDIR)$(docdir)
 	cp -r $< $(DESTDIR)$(docdir)/
 uninstall-html:

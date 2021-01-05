@@ -39,9 +39,11 @@ static inline int _zero_return(void){return 0;}
 #include "ghintg/gh_ptpclock.h"
 #define PTPFD_TYPE void*
 #define PTPFD_VALID(ptpfd) (ptpfd!=NULL)
-#define PTPDEV_CLOCK_OPEN(x,y) gh_ptpclock_open(x,y)
-#define PTPDEV_CLOCK_CLOSE(x)  gh_ptpclock_close(x)
-
+#define PTPDEV_CLOCK_OPEN(x,y) (strstr(x, CB_VIRTUAL_PTPDEV_PREFIX)==x)?\
+	(PTPFD_TYPE)GPTP_VIRTUAL_PTPDEV_FDBASE:gh_ptpclock_open(x,y)
+static inline int _zero_return(void){return 0;}
+#define PTPDEV_CLOCK_CLOSE(x) (x==(PTPFD_TYPE)GPTP_VIRTUAL_PTPDEV_FDBASE)?\
+	_zero_return():gh_ptpclock_close(x)
 #endif
 
 #ifndef MAIN_RETURN

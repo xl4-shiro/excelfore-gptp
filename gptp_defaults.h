@@ -60,7 +60,7 @@
 /* absolute value of clock rate adjustment shouldn't go beyond this value */
 #define DEFAULT_MAX_ADJUST_RATE_ON_CLOCK 1000000 //ppb unit
 
-#define DEFAULT_IPC_NOTICE_PHASE_UPDATE 0
+#define DEFAULT_IPC_NOTICE_PHASE_UPDATE 1
 #define DEFAULT_IPC_NOTICE_FREQ_UPDATE 0
 
 /* setting this value, TAS(Domain 0 only) becomes asCapable without PdelayResponse,
@@ -219,11 +219,10 @@
 // can correct the rate when the previous GM has a bad rate.
 #define DEFAULT_RESET_FREQADJ_BECOMEGM 0
 
-// GHS INTEGRITY ptp clock frequency increasement value, this value varies in the hardware.
-// Refer to the INTEGRITY BSP and configure the gptp daemon to use the correct value.
-#define DEFAULT_INTEGRITY_FREQ_INCR 0xFFFFFFFFFFFFFFFF
+// GHS INTEGRITY ptp clock info contains clock name and clock frequency increase.
+// The clock info follow the format "clock_name:clock_freq" and may vary in the OS and HW.
+// Refer to the INTEGRITY BSP to configure the gptp daemon with the correct info.
+// Multiple clocks shall be separated by comma e.g. "PTP1:10000,PTP2:20000,PTP3:30000".
+#define DEFAULT_INTEGRITY_CLOCK_INFO "IOD_AVB_PTP_Clock:7876923" // max_length=128
 
-// GHS INTEGRITY ptp clock name, this value may vary in the OS version and hardware.
-// Refer to the INTEGRITY BSP and configure the gptp daemon to use the correct value.
-#define DEFAULT_INTEGRITY_CLOCK_NAME "IOD_AVB_PTP_Clock" // max_length=32
 #endif

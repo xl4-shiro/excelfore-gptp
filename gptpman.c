@@ -291,7 +291,7 @@ static int gptpnet_cb_devup(gptpman_data_t *gpmand, int portIndex,
 	}
 	UB_LOG(UBL_INFO, "index=%d speed=%d, duplex=%s, ptpdev=%s\n",
 	       portIndex, ed->speed, dup, ed->ptpdev);
-	
+
 	if(ed->speed<100 || ed->duplex!=1){
 		UB_LOG(UBL_WARN,"!!! Full duplex link with "
 			   "Speed above 100 Mbps needed for gptp to run !!!\n");
@@ -552,10 +552,10 @@ static int ipc_respond_one_clock(gptpnet_data_t *gpnetd,
 		return -1;
 	}
 	if(portIndex==0){
-		pd.u.clockd.gmTimeBaseIndicator=tasglb->gmTimeBaseIndicator;
-		memcpy(&pd.u.clockd.lastGmFreqChangePk, &tasglb->lastGmFreqChange,
+		pd.u.clockd.gmTimeBaseIndicator=tasglb->clockSourceTimeBaseIndicator;
+		memcpy(&pd.u.clockd.lastGmFreqChangePk, &tasglb->clockSourceLastGmFreqChange,
 		       sizeof(double));
-		pd.u.clockd.lastGmPhaseChange_nsec=tasglb->lastGmPhaseChange.nsec;
+		pd.u.clockd.lastGmPhaseChange_nsec=tasglb->clockSourceLastGmPhaseChange.nsec;
 	}
 	gptpnet_ipc_respond(gpnetd, addr, &pd, sizeof(pd));
 	return 0;
@@ -751,10 +751,10 @@ static int ipc_clock_master_clock_notice(gptpnet_data_t *gpnetd,
 	ipcd.u.notice.domainNumber=tasglb->domainNumber;
 	ipcd.u.notice.domainIndex=di;
 
-	ipcd.u.notice.gmTimeBaseIndicator=tasglb->gmTimeBaseIndicator;
-	memcpy(&ipcd.u.notice.lastGmFreqChangePk, &tasglb->lastGmFreqChange,
+	ipcd.u.notice.gmTimeBaseIndicator=tasglb->clockSourceTimeBaseIndicator;
+	memcpy(&ipcd.u.notice.lastGmFreqChangePk, &tasglb->clockSourceLastGmFreqChange,
 	       sizeof(double));
-	ipcd.u.notice.lastGmPhaseChange_nsec=tasglb->lastGmPhaseChange.nsec;
+	ipcd.u.notice.lastGmPhaseChange_nsec=tasglb->clockSourceLastGmPhaseChange.nsec;
 
 	return gptpnet_ipc_notice(gpnetd, &ipcd, sizeof(ipcd));
 }
@@ -1293,8 +1293,10 @@ int gptpman_run(char *netdevs[], int max_ports, int max_domains, char *inittm)
 		memset(gpmand->tasds[i].ptds, 0, max_ports * sizeof(gptpsm_ptd_t));
                 // create per-port global lists
                 gpmand->tasds[i].ppglbl=malloc(max_ports * sizeof(PerPortGlobal*));
+				ub_assert(gpmand->tasds[i].ppglbl, __func__, "malloc error");
                 memset(gpmand->tasds[i].ppglbl, 0, max_ports * sizeof(PerPortGlobal*));
                 gpmand->tasds[i].bppglbl=malloc(max_ports * sizeof(BmcsPerPortGlobal*));
+				ub_assert(gpmand->tasds[i].bppglbl, __func__, "malloc error");
                 memset(gpmand->tasds[i].bppglbl, 0, max_ports * sizeof(BmcsPerPortGlobal*));
 	}
 

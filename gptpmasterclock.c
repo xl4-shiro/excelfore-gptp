@@ -129,6 +129,7 @@ int gptpmasterclock_init(const char *shmem_name)
 		goto erexit;
 	}
 	gmcd.ptpfds=malloc(gmcd.max_domains*sizeof(PTPFD_TYPE));
+	ub_assert(gmcd.ptpfds, __func__, "malloc error");
 	memset(gmcd.ptpfds,0,gmcd.max_domains*sizeof(PTPFD_TYPE));
 	if(ptpdev_open()) goto erexit;
 	if(gmcd.suppress_msg){

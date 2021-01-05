@@ -309,15 +309,14 @@ static void *receive_source_time_proc(clock_master_sync_receive_data_t *sm)
 		mts = sm->ptasg->syncReceiptTime.seconds.lsb * UB_SEC_NS +
 			sm->ptasg->syncReceiptTime.fractionalNanoseconds.msb;
 		lts = sm->ptasg->syncReceiptLocalTime.nsec;
-		if(!computeGmRateRatio(sm, lts, mts)){
-			sm->ptasg->clockSourceTimeBaseIndicatorOld =
-				sm->ptasg->clockSourceTimeBaseIndicator;
-			gptpclock_get_clock_params(0, sm->ptasg->domainNumber,
-						   &sm->ptasg->clockSourceTimeBaseIndicator,
-						   &sm->ptasg->clockSourceLastGmPhaseChange,
-						   &sm->ptasg->clockSourceLastGmFreqChange);
-			gptpclock_set_gmsync(0, sm->ptasg->domainNumber, false);
-		}
+		computeGmRateRatio(sm, lts, mts);
+		sm->ptasg->clockSourceTimeBaseIndicatorOld =
+			sm->ptasg->clockSourceTimeBaseIndicator;
+		gptpclock_get_clock_params(0, sm->ptasg->domainNumber,
+					   &sm->ptasg->clockSourceTimeBaseIndicator,
+					   &sm->ptasg->clockSourceLastGmPhaseChange,
+					   &sm->ptasg->clockSourceLastGmFreqChange);
+		gptpclock_set_gmsync(0, sm->ptasg->domainNumber, false);
 	}
 	RCVD_CLOCK_SOURCE_REQ = false;
 	RCVD_LOCAL_CLOCK_TICK = false;

@@ -294,7 +294,7 @@ int gptpipc_init(gptpipc_thread_data_t *ipctd, int wait_toutsec)
 	const char *thread_name="avtpd_gptpd_ipc_thread";
 	cb_xl4_thread_attr_t attr;
 
-        cb_xl4_thread_attr_init(&attr, THREAD_SAME_PRI, THREAD_NORM_STACK, thread_name);
+	cb_xl4_thread_attr_init(&attr, THREAD_SAME_PRI, THREAD_NORM_STACK, thread_name);
 	if(CB_THREAD_CREATE(&ipctd->ipcthread, &attr, gptpipc_thread_proc, ipctd)){
 		UB_LOG(UBL_ERROR,"%s:CB_THREAD_CREATE, %s\n", __func__, strerror(errno));
 		return -1;

@@ -2,6 +2,8 @@
 + Implementation of 802.1AS (including 802.1AS-REV part)
 + Endpoint mode / Bridge mode
 + Single domain mode / Multiple domains mode
++ The source code is available at git@github.com:xl4-shiro/excelfore-gptp.git.<br/>
+  The build instruction below is to work on this opensource codes.
 
 ## Prerequisites
 + C99 standard level library functions and C compiler functions must be supported to
@@ -68,6 +70,13 @@ For multiple ethernet devices(bridge mode):
 In the slave mode, the console will show the frequency adjustment rate in ppb as follows:
 
    INF:domainNumber=0, clock_master_sync_receive:the master clock rate to 21344ppb
+
+Running on SW timestamping port is possible, but such a port unlikely has ptp clock.<br/>
+Adding a virtual port like 'cbeth0' creates a virtual ptp clock, and gptp2d can proceed to run.<br/>
+'neighborPropDelayThresh' must be adjust on the other side of the connection.
+
+    $ sudo gptp2d -d cbeth0,eth0
+
 
 ## get gptp time in application
 Any applications which use the gPTP clock values need to link to 'libx4gptp2'.<br/>

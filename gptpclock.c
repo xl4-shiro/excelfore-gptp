@@ -20,6 +20,7 @@
  */
 #include <fcntl.h>
 #include <stdio.h>
+#include <limits.h>
 #include "gptp_defaults.h"
 #include "gptpclock.h"
 #include "gptpcommon.h"
@@ -172,6 +173,8 @@ separately, and the combined value must be copied into the shared memory.
  */
 
 #define MAX_CONSEC_TS_DIFF 500000 //500usec
+#define LASTGM_OFFSET64_INVALID LLONG_MAX
+#define LASTGM_ADJVPPB_INVALID INT_MAX
 
 typedef enum {
 	PTPCLOCK_MASTER = 0, // no adjustment
@@ -196,6 +199,9 @@ typedef struct oneclock_data {
 	ScaledNs lastGmPhaseChange;
 	int ts2diff;
 	uint32_t flags;
+	double lastGmFreqChange;
+	int lastgm_adjvppb;
+	int64_t lastgm_offset64;
 } oneclock_data_t;
 
 typedef struct per_domain_data {
@@ -218,19 +224,11 @@ struct gptpclock_data {
 
 static gptpclock_data_t gcd;
 
-#ifdef GHINTEGRITY
 #define GPTPCLOCK_FN_ENTRY(od,clockIndex,domainNumber)  {	\
 	if(!gcd.clds) return -1; \
 	if((od=get_clockod(clockIndex, domainNumber))==NULL) return -1; \
-	if(od->ptpfd == NULL) return -1; \
+	if(!PTPFD_VALID(od->ptpfd)) return -1; \
 	}
-#else
-#define GPTPCLOCK_FN_ENTRY(od,clockIndex,domainNumber)  {	\
-	if(!gcd.clds) return -1; \
-	if((od=get_clockod(clockIndex, domainNumber))==NULL) return -1; \
-	if(od->ptpfd<0) return -1; \
-	}
-#endif
 
 static oneclock_data_t *get_clockod(int clockIndex, uint8_t domainNumber)
 {
@@ -298,10 +296,6 @@ static int gptpclock_setts_od(int64_t ts64, oneclock_data_t *od)
 		gptpclock_mutex_trylock(&gcd.shm->head.mcmutex);
 
 	od->offset64=ts64-od->last_setts64;
-	od->timeBaseIndicator++;
-	od->flags |= GPTPIPC_EVENT_CLOCK_FLAG_PHASE_UPDATE;
-	od->lastGmPhaseChange.nsec = od->offset64;
-
 	if(od->mode==PTPCLOCK_SLAVE_MAIN){
 		od->offset64=0;
 		GPTP_CLOCK_SETTIME(od->ptpfd, ts64);
@@ -475,11 +469,7 @@ void gptpclock_close(void)
 			// return HW adjustment rate to 0
 			gptp_clock_adjtime(od.ptpfd, 0);
 		}
-#ifdef GHINTEGRITY
-		if(od.ptpfd != NULL ) gptp_close_ptpfd(od.ptpfd);
-#else
-		if(od.ptpfd>=0) gptp_close_ptpfd(od.ptpfd);
-#endif
+		if(PTPFD_VALID(od.ptpfd)) gptp_close_ptpfd(od.ptpfd);
 	}
 	ub_esarray_close(gcd.clds);
 	CB_THREAD_MUTEX_DESTROY(&gcd.shm->head.mcmutex);
@@ -537,9 +527,13 @@ int gptpclock_setoffset64(int64_t ts64, int clockIndex, uint8_t domainNumber)
 	if(od->mode != PTPCLOCK_SLAVE_MAIN){
 		if(!clockIndex) gptpclock_mutex_trylock(&gcd.shm->head.mcmutex);
 		od->offset64=ts64;
-		od->timeBaseIndicator++;
-		od->flags |= GPTPIPC_EVENT_CLOCK_FLAG_PHASE_UPDATE;
-		od->lastGmPhaseChange.nsec = od->offset64;
+		if(od->lastgm_offset64!=LASTGM_OFFSET64_INVALID){
+			od->flags |= GPTPIPC_EVENT_CLOCK_FLAG_PHASE_UPDATE;
+			od->lastGmPhaseChange.nsec = od->offset64 - od->lastgm_offset64;
+			od->lastgm_offset64 = LASTGM_OFFSET64_INVALID;
+			UB_LOG(UBL_INFO, "%s:lastGmPhaseChange=%"PRIi64"\n",
+			       __func__, od->lastGmPhaseChange.nsec);
+		}
 		gptpclock_setoffset_od(od);
 		if(!clockIndex) CB_THREAD_MUTEX_UNLOCK(&gcd.shm->head.mcmutex);
 		GH_SET_GPTP_SHM;
@@ -561,6 +555,7 @@ int gptpclock_setadj(int adjvppb, int clockIndex, uint8_t domainNumber)
 	oneclock_data_t *od;
 	oneclock_data_t *od0;
 	uint32_t save_flags;
+	int64_t ts;
 	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
 	switch(od->mode){
 	case PTPCLOCK_SLAVE_MAIN:
@@ -576,9 +571,11 @@ int gptpclock_setadj(int adjvppb, int clockIndex, uint8_t domainNumber)
 	case PTPCLOCK_SLAVE_SUB:
 		// to apply new adjrate, update offset value. it updates 'last_setts64'.
 		save_flags=od->flags;
-		if(time_setoffset64(od->ts2diff/2, clockIndex, domainNumber) > od->ts2diff*10){
+		ts=time_setoffset64(od->ts2diff/2, clockIndex, domainNumber);
+		if(ts > od->ts2diff*10){
 			UB_LOG(UBL_WARN, "%s:clockIndex=%d, domainNumber=%d, time_setoffset64 "
-			       "took too long\n", __func__, clockIndex, domainNumber);
+			       "took too long, %"PRIi64"/%d\n",
+			       __func__, clockIndex, domainNumber, ts, od->ts2diff);
 		}
 		od->flags=save_flags; // don't update the flag by the above procedure
 		od->adjrate = (double)adjvppb/1.0E9;
@@ -590,8 +587,6 @@ int gptpclock_setadj(int adjvppb, int clockIndex, uint8_t domainNumber)
 		break;
 	}
 	od->adjvppb=adjvppb;
-	od->timeBaseIndicator++;
-	od->flags |= GPTPIPC_EVENT_CLOCK_FLAG_FREQ_UPDATE;
 	return 0;
 }
 
@@ -766,7 +761,7 @@ int gptpclock_get_clock_params(int clockIndex, uint8_t domainNumber,
 {
 	oneclock_data_t *od;
 	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
-	*lastGmFreqChange = (double)od->adjvppb/1.0E9;
+	*lastGmFreqChange = od->lastGmFreqChange;
 	*gmTimeBaseIndicator = od->timeBaseIndicator;
 	*lastGmPhaseChange = od->lastGmPhaseChange;
 	return 0;
@@ -893,9 +888,21 @@ int gptpclock_get_gmsync(int clockIndex, uint8_t domainNumber)
 
 void gptpclock_set_gmstable(int domainIndex, bool stable)
 {
+	oneclock_data_t *od;
+	if(domainIndex<0 || domainIndex>=gcd.shm->head.max_domains) return;
 	if(gcd.pdd[domainIndex].gm_stable==stable) return;
 	gcd.pdd[domainIndex].gm_stable=stable;
 	gptpclock_update_active_domain();
+	if((od=get_clockod(gcd.pdd[domainIndex].thisClockIndex,
+			   gcd.pdd[domainIndex].domainNumber))==NULL) return;
+	if(od->lastgm_adjvppb!=LASTGM_ADJVPPB_INVALID){
+		od->lastGmFreqChange = (double)(od->adjvppb - od->lastgm_adjvppb)/1.0E9;
+		od->flags |= GPTPIPC_EVENT_CLOCK_FLAG_FREQ_UPDATE;
+		UB_LOG(UBL_INFO, "%s:lastGmFreqChange=%fppb, last=%d, new=%d\n",
+		       __func__, od->lastGmFreqChange*1.0E9,
+		       od->lastgm_adjvppb, od->adjvppb);
+		od->lastgm_adjvppb=LASTGM_ADJVPPB_INVALID;
+	}
 }
 
 bool gptpclock_get_gmstable(int domainIndex)
@@ -911,6 +918,14 @@ int gptpclock_set_gmchange(int domainNumber, ClockIdentity clockIdentity)
 	od->flags |= GPTPIPC_EVENT_CLOCK_FLAG_GM_CHANGE;
 	od->pp->gmchange_ind++;
 	memcpy(gcd.pdd[od->domainIndex].gmClockId, clockIdentity, sizeof(ClockIdentity));
+	od->timeBaseIndicator++;
+	od->lastgm_offset64=od->offset64;
+	od->lastGmPhaseChange.nsec=0;
+	// FreqAdj is in thisClock
+	if((od=get_clockod(gcd.pdd[od->domainIndex].thisClockIndex,
+			   domainNumber))==NULL) return -1;
+	od->lastgm_adjvppb=od->adjvppb;
+	od->lastGmFreqChange=0.0;
 	GH_SET_GPTP_SHM;
 	return 0;
 }
@@ -970,7 +985,7 @@ int gptpclock_set_thisClock(int clockIndex, uint8_t domainNumber, bool set_clock
 	}
 
 	gcd.pdd[od->domainIndex].thisClockIndex=clockIndex;
-	// make sure the maste clock(clockIndex=0) is PTPCLOCK_MASTER
+	// make sure the master clock(clockIndex=0) is PTPCLOCK_MASTER
 	mod->mode=PTPCLOCK_MASTER;
 
 	/* During the offset and adjrate are moved into thisClock from the master clock,

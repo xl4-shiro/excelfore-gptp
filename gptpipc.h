@@ -156,7 +156,7 @@ typedef struct gptpipc_client_req_data {
  *  6. portid -> ClockIdentity is used to hold port identity number.
  */
 #define GPTPIPC_MAX_NETDEV_NAME 16
-#define GPTPIPC_MAX_PTPDEV_NAME 16
+#define GPTPIPC_MAX_PTPDEV_NAME 32
 typedef struct gptpipc_data_netlink {
 	uint32_t speed;
 	uint32_t duplex;
