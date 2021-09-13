@@ -498,6 +498,13 @@ int64_t gptpclock_getts64(int clockIndex, uint8_t domainNumber)
 	return ts64;
 }
 
+int64_t gptpclock_getoffset64(int clockIndex, uint8_t domainNumber)
+{
+	oneclock_data_t *od;
+	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
+	return od->offset64;
+}
+
 int gptpclock_active_domain(void)
 {
 	return gcd.shm->head.active_domain;

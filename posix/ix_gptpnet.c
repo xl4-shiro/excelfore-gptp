@@ -62,6 +62,69 @@ struct gptpnet_data {
 	int64_t next_tout64;
 };
 
+/* Wheel Sync Support - START */
+#define X4GCD_DEVICE "/dev/x4gcd"
+
+typedef struct {
+	int64_t offset64;
+} __attribute__((packed)) gptp_clock_data_t;
+static gptp_clock_data_t x4gcd;
+static const size_t gcd_size = sizeof(gptp_clock_data_t);
+static FILE *x4gcd_dev=NULL;
+
+static int open_x4gcd_dev(void)
+{
+	x4gcd_dev = fopen(X4GCD_DEVICE, "w");
+	if( x4gcd_dev == NULL ) {
+		UB_LOG(UBL_ERROR,"%s: Error opening x4gcd_dev [%s]\n", __func__, X4GCD_DEVICE);
+		return -1;
+	}
+	return 0;
+}
+
+static int close_x4gcd_dev(void)
+{
+	int ret = fclose(x4gcd_dev);
+	if( x4gcd_dev == NULL ) {
+		UB_LOG(UBL_WARN,"%s: Error closing x4gcd_dev\n", __func__);
+		return -1;
+	}
+	return 0;
+}
+
+static int check_and_update_x4gcd_dev(void)
+{
+	static uint64_t last_update_64=0;
+	uint64_t cts64 = ub_mt_gettime64();
+
+	if (!x4gcd_dev){
+		UB_LOG(UBL_ERROR,"%s: %s is not yet opened for writing\n",
+		       __func__, X4GCD_DEVICE);
+		return -1;
+	}
+
+	if( (cts64 - last_update_64) > UB_SEC_NS ) {
+		int64_t offset64 = gptpclock_getoffset64(0, gptpclock_active_domain());
+		int ret;
+		if (offset64 != x4gcd.offset64) {
+			UB_LOG(UBL_INFO, "%s: [%lx] X4GCD offset64 update: "
+			        "old: %"PRIi64" -> new: %"PRIi64"\n", __func__, cts64,
+			        x4gcd.offset64, offset64);
+			x4gcd.offset64 = offset64;
+			ret = fwrite(&x4gcd, 1, gcd_size, x4gcd_dev);
+			if( ret != gcd_size ){
+				UB_LOG(UBL_ERROR,"%s: Error writing to %s, ret=%d\n",
+				       __func__, X4GCD_DEVICE, ret);
+				return -1;
+			}
+		}
+		last_update_64 = cts64;
+		fflush(x4gcd_dev);
+	}
+	return 0;
+}
+/* Wheel Sync Support - END */
+
 static int netlink_init(int *fd)
 {
 	struct sockaddr_nl sa;
@@ -464,6 +527,10 @@ gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, cb_ipcsocket_server_rdcb ipc_
 		UB_LOG(UBL_ERROR,"%s:too many netework devices\n",__func__);
 		return NULL;
 	}
+	if( open_x4gcd_dev() ){
+		UB_LOG(UBL_ERROR,"%s:Failed to open x4gcd char device\n",__func__);
+		return NULL;
+	}
 	gpnet=malloc(sizeof(gptpnet_data_t));
 	ub_assert(gpnet, __func__, "malloc");
 	memset(gpnet, 0, sizeof(gptpnet_data_t));
@@ -543,6 +610,7 @@ int gptpnet_close(gptpnet_data_t *gpnet)
 		}
 	}
 	if(gpnet->netlinkfd) close(gpnet->netlinkfd);
+	if(x4gcd_dev) close_x4gcd_dev();
 	cb_ipcsocket_server_close(gpnet->ipcsd);
 	free(gpnet->netdevices);
 	free(gpnet);
@@ -552,6 +620,7 @@ int gptpnet_close(gptpnet_data_t *gpnet)
 int gptpnet_eventloop(gptpnet_data_t *gpnet, int *stoploop)
 {
 	while(!*stoploop){
+		check_and_update_x4gcd_dev();
 		gptpnet_catch_event(gpnet);
 	}
 	return 0;

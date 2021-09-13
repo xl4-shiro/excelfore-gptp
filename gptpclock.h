@@ -93,6 +93,7 @@ int gptpclock_mode_slave_main(int clockIndex, uint8_t domainNumber);
 int gptpclock_mode_slave_sub(int clockIndex, uint8_t domainNumber);
 
 int64_t gptpclock_getts64(int clockIndex, uint8_t domainNumber);
+int64_t gptpclock_getoffset64(int clockIndex, uint8_t domainNumber);
 int64_t gptpclock_gethwts64(int clockIndex, uint8_t domainNumber);
 int gptpclock_tsconv(int64_t *ts64, int clockIndex, uint8_t domainNumber,
 		     int clockIndex1, uint8_t domainNumber1);
