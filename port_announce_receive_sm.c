@@ -87,7 +87,7 @@ static bool qualifyAnnounce(port_announce_receive_data_t *sm)
 			}
 		}
 		if(SELECTED_STATE[sm->ppg->thisPortIndex] == SlavePort){
-			if (N+1 < MAX_PATH_TRACE_N){
+			if (N+1 <= MAX_PATH_TRACE_N){
 				/* path trace TLV copy to pathTrace */
 				memcpy(PATH_TRACE, RCVD_ANNOUNCE_PTR->pathSequence,
 				       sizeof(ClockIdentity) * N);
@@ -95,8 +95,8 @@ static bool qualifyAnnounce(port_announce_receive_data_t *sm)
 				memcpy(&(PATH_TRACE[N]), sm->ptasg->thisClock, sizeof(ClockIdentity));
 				sm->bptasg->pathTraceCount = N+1;
 			}else{
-				UB_LOG(UBL_WARN, "port_announce_receive:%s:pathTrace=%d exceeds limit=%d\n",
-				       __func__, N, MAX_PATH_TRACE_N);
+				UB_LOG(UBL_WARN, "port_announce_receive:%s:pathTrace=%d (including thisClock) exceeds limit=%d\n",
+				       __func__, N+1, MAX_PATH_TRACE_N);
 				/* 10.3.8.23 ... a path trace TLV is not appended to an Announce message
 				   and the pathTrace array is empty, once appending a clockIdentity
 				   to the TLV would cause the frame carrying the Announce to exceed

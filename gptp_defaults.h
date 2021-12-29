@@ -31,6 +31,14 @@
 #define DEFAULT_MAX_DOMAIN_NUMBER 1
 #define DEFAULT_MAX_PORT_NUMBER 8
 
+/* 10.2.5.13 ptpPortEnabled
+   Per-port configuration to enable or disable gPTP capability.
+   Comma separated list of values that matches the number of ports (excluding port 0)
+   value 0: ptpPortEnabled is false
+   value 1: ptpPortEnabled is true
+   When this configuration is not enabled, all ports defaults to gPTP capable port. */
+#define DEFAULT_PTP_PORT_ENABLED "1,1,1,1,1,1,1,1" // max_length=32 use ""
+
 #define DEFAULT_MASTER_PTPDEV "" // max_length=32 use "" for the first detected ptpdev
 
 #define DEFAULT_TXTS_LOST_TIME 20000000 //20msec, give up if no TxTS in this time
@@ -74,9 +82,28 @@
    on port N is GM. */
 #define DEFAULT_STATIC_PORT_STATE_SLAVE_PORT -1
 
-// 8.2.2 Timescale if PTP (1) is epoch is PTP epoch
-// otherwise, ARB (0) if time scale is arbitrary
+/* 8.2.2 Timescale if PTP (1) is epoch is PTP epoch
+   otherwise, ARB (0) if time scale is arbitrary
+   Notes:
+   - AVNU (gPTP.com.c.12.05a,gPTP.com.c.12.05a, and gPTP.com.c.12.05c) requires
+   the value of this setting to be set to (1) */
 #define DEFAULT_TIMESCALE_PTP 1
+
+/* Option to conform to AVNU instead of 802.1AS specification in case of
+   conflict.
+   By default, set 0 such that 802.1AS behavior is followed for items where
+   conforming to AVNU will violate the 802.1AS specifications.
+
+   The following is a list of known AVNU requirements that violates 802.1AS:
+   - gPTP.br.c.24.1 - Appending path trace TLV - over max length
+     802.1AS requires PathTrace field to exist with length=0 in cases where TLV
+	 pathTrace is empty.
+	 AVNU on the other hand, requires the PathTrace field to be absent.
+   - gPTP.com.c.18.1 / gPTP.com.c.15.7 - AVnu alliance requires in addition that
+     devices cease transmit of PDelayReq when 3 successive request are responded
+	 with multiple response.
+ */
+#define DEFAULT_FOLLOW_AVNU 0
 
 // 10.3.2 systemIdentity
 // PRIMARY is used for domainNumber=0, SECONDARY is used for the other domains
@@ -145,8 +172,14 @@
 // 11.5.4 allowedFaults
 #define DEFAULT_ALLOWED_FAULTS 9
 // Table 11-1-Value of neighborPropDelayThresh for various links
-//#define DEFAULT_NEIGHBOR_PROPDELAY_THRESH 800
+// Upper limit for peer delay in nanoseconds, computed values greater than this
+// will mark the port as asCapable
+//#define DEFAULT_NEIGHBOR_PROPDELAY_THRESH 800 // default for AVnu Test Plan
 #define DEFAULT_NEIGHBOR_PROPDELAY_THRESH 40000 // for Intel i218,i219
+
+// Lower limit for peer delay in nanoseconds, computed values lower than this
+// will mark the port as non asCapable
+#define DEFAULT_NEIGHBOR_PROPDELAY_MINLIMIT 0
 
 // if this is a positive number, use a UDP connection for the IPC instaead of Unix Domain Socket
 // the defined number becomes the UDP server port number
@@ -166,6 +199,8 @@
 #define DEFAULT_FREQ_OFFSET_IIR_ALPHA_STABLE_VALUE 10 // reciprocal number is used
 #define DEFAULT_PHASE_OFFSET_IIR_ALPHA_START_VALUE 2 // reciprocal number is used
 #define DEFAULT_PHASE_OFFSET_IIR_ALPHA_STABLE_VALUE 10 // reciprocal number is used
+
+#define DEFAULT_FREQ_OFFSET_STABLE_PPB 100 // freq. is stable if delta of adj rate is less then this
 
 // switch active domain automatically to stable domain
 // 2: even the current active domain is stable, if any lower number of domain is stable
@@ -201,14 +236,21 @@
 // for the over ip mode testing, this clock rate(ppb unit) change is applied.
 #define DEFAULT_PTPVFD_CLOCK_RATE 0
 
+// low-pass-filter threshold value for calculating the average ts2diff
+// (time spend to setup the clock value)
+#define DEFAULT_MAX_CONSEC_TS_DIFF 500000 //500usec
+
 // ts2diff(time spent to setup the clock value) is measured at the top,
-// the value is compensated by this percentage to cancel cash effect
+// the value is compensated by this percentage to cancel cache effect
 #define DEFAULT_TS2DIFF_CACHE_FACTOR 150
 
 // This should be 0. When the shared memory is not available and only a single domain
 // is used, setting this value to '1' makes the adjustment apply on HW clock.
 // There is a risk of disrupted timestamps; happening errors might be covered in tolerance level.
 #define DEFAULT_USE_HW_PHASE_ADJUSTMENT 0
+
+// a small phase adjustment is done by a frequency change
+#define DEFAULT_PHASE_ADJUSTMENT_BY_FREQ 1
 
 // Setting to '1', the md_abnormal_hooks layer is activated.
 // Even if this is activated, no actions happens until abnormal events are registered.

@@ -33,6 +33,7 @@
 #define ANNOUNCE_RECEIPT_TIMEOUT sm->bppg->announceReceiptTimeout
 #define ANNOUNCE_INTERVAL   sm->bppg->announceInterval
 #define SELECTED	    sm->bptasg->selected
+#define AS_CAPABLE sm->ppg->asCapable
 
 typedef enum {
 	INIT,
@@ -82,7 +83,7 @@ static void txAnnounce(port_announce_transmit_data_t *sm)
 	sm->announceTx.timeSource = sm->bptasg->timeSource;
 	sm->announceTx.tlvType = 0x8;
 	N = sm->bptasg->pathTraceCount;
-	if (N < MAX_PATH_TRACE_N){
+	if (N <= MAX_PATH_TRACE_N){
 		sm->announceTx.tlvLength = sizeof(ClockIdentity)*N;
 		memcpy(&sm->announceTx.pathSequence, &sm->bptasg->pathTrace,
 		       sm->announceTx.tlvLength);
@@ -99,7 +100,11 @@ static void txAnnounce(port_announce_transmit_data_t *sm)
 
 static port_announce_transmit_state_t allstate_condition(port_announce_transmit_data_t *sm)
 {
-	if (sm->ptasg->BEGIN || !sm->ptasg->instanceEnable){
+	/* 802.1AS-2020 PortAnnounceTransmitSM TRANSMIT_INIT does not
+	 * require asCapable condition as per the specification.
+	 * However, we opt to add it to minimize procedures done during IDLE when
+	 * asCapable is false. */
+	if (sm->ptasg->BEGIN || !sm->ptasg->instanceEnable || !AS_CAPABLE){
 		return TRANSMIT_INIT;
 	}
 	return sm->state;
@@ -228,7 +233,6 @@ void *port_announce_transmit_sm(port_announce_transmit_data_t *sm, uint64_t cts6
 			if(state_change)
 				retp=transmit_announce_proc(sm);
 			sm->state = transmit_announce_condition(sm);
-			sm->last_state = IDLE;
 			break;
 		case REACTION:
 			break;

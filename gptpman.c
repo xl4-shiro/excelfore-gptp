@@ -65,20 +65,20 @@ extern char *gptpnet_event_debug[];
 // per-port data
 typedef struct gptpsm_ptd{
 	PerPortGlobal *ppglb;
-        BmcsPerPortGlobal *bppglb;
+	BmcsPerPortGlobal *bppglb;
 	MDEntityGlobal *mdeglb;
 	md_pdelay_req_data_t *mdpdreqd;
 	md_pdelay_resp_data_t *mdpdrespd;
 	md_sync_receive_data_t *mdsrecd;
 	md_sync_send_data_t *mdssendd;
-        announce_interval_setting_data_t *aisetd;
+	announce_interval_setting_data_t *aisetd;
 	port_sync_sync_receive_data_t *pssrecd;
 	port_sync_sync_send_data_t *psssendd;
-        port_announce_receive_data_t *parecd;
-        port_announce_information_data_t *painfd;
-        port_announce_information_ext_data_t *paiextd;
-        port_announce_transmit_data_t *patransd;
-        port_state_setting_ext_data_t *pssextd;
+	port_announce_receive_data_t *parecd;
+	port_announce_information_data_t *painfd;
+	port_announce_information_ext_data_t *paiextd;
+	port_announce_transmit_data_t *patransd;
+	port_state_setting_ext_data_t *pssextd;
 	bool cmldsLinkPortEnabled; // 11.2.16.1
 	gptp_capable_transmit_data_t *gctransd;
 	gptp_capable_receive_data_t *gcrecd;
@@ -95,16 +95,16 @@ typedef struct gptpsm_ptd{
 typedef struct gptpsm_tasd{
 	gptpsm_ptd_t *ptds;
 	PerTimeAwareSystemGlobal *tasglb;
-        BmcsPerTimeAwareSystemGlobal *btasglb;
+	BmcsPerTimeAwareSystemGlobal *btasglb;
 	site_sync_sync_data_t *sssd;
 	clock_master_sync_send_data_t *cmssendd;
 	clock_slave_sync_data_t *cssd;
 	clock_master_sync_receive_data_t *cmsrecd;
 	clock_master_sync_offset_data_t *cmsoffsetd;
-        port_state_selection_data_t *pssd;
+	port_state_selection_data_t *pssd;
 	gm_stable_data_t *gmsd;
-        PerPortGlobal **ppglbl;
-        BmcsPerPortGlobal **bppglbl;
+	PerPortGlobal **ppglbl;
+	BmcsPerPortGlobal **bppglbl;
 } gptpsm_tasd_t;
 
 /*
@@ -129,15 +129,15 @@ struct gptpman_data {
 
 static void set_asCapable(PerTimeAwareSystemGlobal *tasg, gptpsm_ptd_t *ptd)
 {
-	if(ptd->mdeglb->forAllDomain->asCapableAcrossDomains &&
-	   ((ptd->ppglb->forAllDomain->receivedNonCMLDSPdelayReq==1 && tasg->domainNumber==0) ||
-	    ptd->ppglb->neighborGptpCapable)){
+	if(ptd->mdeglb->forAllDomain->asCapableAcrossDomains ||
+	    ptd->ppglb->neighborGptpCapable){
 		if(ptd->ppglb->asCapable) return;
 		ptd->ppglb->asCapable = true;
 		UB_LOG(UBL_INFO,
 		       "set asCapable for domainNumber=%d, portIndex=%d\n",
 		       tasg->domainNumber, ptd->ppglb->thisPortIndex);
 		ptd->ppglb->portEventFlags|=GPTPIPC_EVENT_PORT_FLAG_AS_CAPABLE_UP;
+		ptd->ppglb->portEventFlags&=~GPTPIPC_EVENT_PORT_FLAG_AS_CAPABLE_DOWN;
 	}else{
 		if(!ptd->ppglb->asCapable) return;
 		ptd->ppglb->asCapable = false;
@@ -145,6 +145,7 @@ static void set_asCapable(PerTimeAwareSystemGlobal *tasg, gptpsm_ptd_t *ptd)
 		       "reset asCapable for domainNumber=%d, portIndex=%d\n",
 		       tasg->domainNumber, ptd->ppglb->thisPortIndex);
 		ptd->ppglb->portEventFlags|=GPTPIPC_EVENT_PORT_FLAG_AS_CAPABLE_DOWN;
+		ptd->ppglb->portEventFlags&=~GPTPIPC_EVENT_PORT_FLAG_AS_CAPABLE_UP;
 	}
 }
 
@@ -159,18 +160,18 @@ static int portSyncSync_for_all(gptpman_data_t *gpmand, int domainIndex,
 		if(smretp) md_sync_send_sm_mdSyncSend(
 			gpmand->tasds[domainIndex].ptds[pi].mdssendd, smretp, cts64);
 
-                // send smret to BMCS PortAnnounceInformation
-                port_announce_information_sm_SyncReceiptTimeoutTime(
-                        gpmand->tasds[domainIndex].ptds[pi].painfd, smret);
+		// send smret to BMCS PortAnnounceInformation
+		port_announce_information_sm_SyncReceiptTimeoutTime(
+		gpmand->tasds[domainIndex].ptds[pi].painfd, smret);
 	}
 
 	// send the same smret to ClockSlaveSync
-	smret=clock_slave_sync_sm_portSyncSync(
+	clock_slave_sync_sm_portSyncSync(
 		gpmand->tasds[domainIndex].cssd, smret, cts64);
-	clock_master_sync_offset_sm_SyncReceiptTime(
-		gpmand->tasds[domainIndex].cmsoffsetd, cts64);
 	clock_master_sync_receive_sm_ClockSourceReq(
 		gpmand->tasds[domainIndex].cmsrecd, cts64);
+	clock_master_sync_offset_sm_SyncReceiptTime(
+		gpmand->tasds[domainIndex].cmsoffsetd, cts64);
 
 	return 0;
 }
@@ -186,49 +187,45 @@ static int get_domain_index(gptpman_data_t *gpmand, uint8_t domainNumber)
 	return -1;
 }
 
-
-static int sm_bmcs_perform(gptpsm_ptd_t *ptd,
-			   BmcsPerTimeAwareSystemGlobal *btasglb,
-			   port_state_selection_data_t *pssd,
-			   gm_stable_data_t *gmsd,
-			   uint64_t cts64)
+static int sm_bmcs_perform(gptpman_data_t *gpmand, int domainIndex,
+		                   int portIndex, uint64_t cts64)
 {
-        void *smret;
+	void *smret;
+	gptpsm_tasd_t *tasd = &gpmand->tasds[domainIndex];
 
-        if(btasglb->externalPortConfiguration==VALUE_DISABLED){
-                do{
-                        port_announce_information_sm(ptd->painfd, cts64);
-                        if((smret=port_state_selection_sm(pssd, cts64))){
-				gm_stable_gm_change(gmsd, smret, cts64);
+	if(tasd->btasglb->externalPortConfiguration==VALUE_DISABLED){
+		do{
+			port_announce_information_sm(tasd->ptds[portIndex].painfd, cts64);
+			if((smret=port_state_selection_sm(tasd->pssd, cts64))){
+				gm_stable_gm_change(tasd->gmsd, smret, cts64);
+				// update clock source after GM change
+				clock_master_sync_receive_sm_ClockSourceReq(tasd->cmsrecd, cts64);
 			}
-                }while(ptd->bppglb->updtInfo);
-        }else{ // btasglb->externalPortConfiguration==VALUE_ENABLED
-                smret = port_announce_information_ext_sm(ptd->paiextd, cts64);
-                if(smret) port_state_setting_ext_sm_messagePriority(ptd->pssextd, smret);
-                port_state_setting_ext_sm(ptd->pssextd, cts64);
-        }
+		}while(tasd->ptds[portIndex].bppglb->updtInfo);
+	}else{ // btasglb->externalPortConfiguration==VALUE_ENABLED
+		smret = port_announce_information_ext_sm(tasd->ptds[portIndex].paiextd, cts64);
+		if(smret) port_state_setting_ext_sm_messagePriority(tasd->ptds[portIndex].pssextd, smret);
+		port_state_setting_ext_sm(tasd->ptds[portIndex].pssextd, cts64);
+	}
 
-        smret = port_announce_transmit_sm(ptd->patransd, cts64);
-        if(smret) md_announce_send_sm_mdAnnouncSend(ptd->mdansendd, smret, cts64);
-        return 0;
+	smret = port_announce_transmit_sm(tasd->ptds[portIndex].patransd, cts64);
+	if(smret) md_announce_send_sm_mdAnnouncSend(tasd->ptds[portIndex].mdansendd, smret, cts64);
+	return 0;
 }
 
-static int sm_bmcs_domain_port_update(gptpsm_ptd_t *ptd,
-				      BmcsPerTimeAwareSystemGlobal *btasglb,
-				      port_state_selection_data_t *pssd,
-				      gm_stable_data_t *gmsd,
-				      uint64_t cts64)
+static int sm_bmcs_domain_port_update(gptpman_data_t *gpmand, int domainIndex,
+		                              int portIndex, uint64_t cts64)
 {
-        // update state machine on event occurence
-        // ie. portOper = true, asCapable = true
-        announce_interval_setting_sm(ptd->aisetd, cts64);
-        sm_bmcs_perform(ptd, btasglb, pssd, gmsd, cts64);
-        return 0;
+	// update state machine on event occurence
+	// ie. portOper = true, asCapable = true
+	announce_interval_setting_sm(gpmand->tasds[domainIndex].ptds[portIndex].aisetd, cts64);
+	sm_bmcs_perform(gpmand, domainIndex, portIndex, cts64);
+	return 0;
 }
 
 static int sm_close_for_domain_zero_port(gptpman_data_t *gpmand, int pi)
 {
-        SM_CLOSE(md_pdelay_resp_sm_close, gpmand->tasds[0].ptds[pi].mdpdrespd);
+	SM_CLOSE(md_pdelay_resp_sm_close, gpmand->tasds[0].ptds[pi].mdpdrespd);
 	SM_CLOSE(md_pdelay_req_sm_close, gpmand->tasds[0].ptds[pi].mdpdreqd);
 	SM_CLOSE(link_delay_interval_setting_sm_close, gpmand->tasds[0].ptds[pi].ldisetd);
 	return 0;
@@ -238,7 +235,7 @@ static int sm_close_for_domain_port(gptpman_data_t *gpmand, int di, int pi)
 {
 	if(!DOMAIN_DATA_EXIST(di) ||
 	   (di!=0 && !gpmand->tasds[di].tasglb->domainNumber)){
-		UB_LOG(UBL_INFO, "%s:di=%d, pi=%d, not initialized\n", __func__, di, pi);
+		UB_LOG(UBL_DEBUG, "%s:di=%d, pi=%d, not initialized\n", __func__, di, pi);
 		return -1;
 	}
 	if(di==0) sm_close_for_domain_zero_port(gpmand, pi);
@@ -248,7 +245,7 @@ static int sm_close_for_domain_port(gptpman_data_t *gpmand, int di, int pi)
 	SM_CLOSE(announce_interval_setting_sm_close, gpmand->tasds[di].ptds[pi].aisetd);
 	SM_CLOSE(port_state_setting_ext_sm_close, gpmand->tasds[di].ptds[pi].pssextd);
 	SM_CLOSE(port_announce_receive_sm_close, gpmand->tasds[di].ptds[pi].parecd);
-        SM_CLOSE(port_announce_transmit_sm_close, gpmand->tasds[di].ptds[pi].patransd);
+	SM_CLOSE(port_announce_transmit_sm_close, gpmand->tasds[di].ptds[pi].patransd);
 	SM_CLOSE(md_sync_receive_sm_close, gpmand->tasds[di].ptds[pi].mdsrecd);
 	SM_CLOSE(md_sync_send_sm_close, gpmand->tasds[di].ptds[pi].mdssendd);
 	SM_CLOSE(port_sync_sync_receive_sm_close, gpmand->tasds[di].ptds[pi].pssrecd);
@@ -268,7 +265,7 @@ static int gptpnet_cb_devup(gptpman_data_t *gpmand, int portIndex,
 			    event_data_netlink_t *ed, uint64_t cts64)
 {
 	char *dup;
-        int di;
+	int di;
 	gptpipc_gptpd_data_t ipcd;
 
 	switch(ed->duplex){
@@ -276,25 +273,22 @@ static int gptpnet_cb_devup(gptpman_data_t *gpmand, int portIndex,
 		if(ed->speed<100) break;
 		gpmand->tasds[0].ptds[portIndex].ppglb->forAllDomain->portOper=true;
 
-                for(di=0;di<gpmand->max_domains;di++){
-                        if(!DOMAIN_DATA_EXIST(di)) continue;
+		for(di=0;di<gpmand->max_domains;di++){
+			if(!DOMAIN_DATA_EXIST(di)) continue;
 			if(di!=0 && !gpmand->tasds[di].tasglb->domainNumber) continue;
-                        sm_bmcs_domain_port_update(&gpmand->tasds[di].ptds[portIndex],
-						   gpmand->tasds[di].btasglb,
-						   gpmand->tasds[di].pssd,
-						   gpmand->tasds[di].gmsd, cts64);
-                }
+			sm_bmcs_domain_port_update(gpmand, di, portIndex, cts64);
+		}
 
 		break;
 	case 2: dup="half"; break;
 	default: dup="unknown"; break;
 	}
 	UB_LOG(UBL_INFO, "index=%d speed=%d, duplex=%s, ptpdev=%s\n",
-	       portIndex, ed->speed, dup, ed->ptpdev);
+	       portIndex, (int)ed->speed, dup, ed->ptpdev);
 
 	if(ed->speed<100 || ed->duplex!=1){
 		UB_LOG(UBL_WARN,"!!! Full duplex link with "
-			   "Speed above 100 Mbps needed for gptp to run !!!\n");
+				"Speed above 100 Mbps needed for gptp to run !!!\n");
 	}
 
 	memset(&ipcd, 0, sizeof(ipcd));
@@ -309,6 +303,7 @@ static int gptpnet_cb_devdown(gptpman_data_t *gpmand, int portIndex,
 			      event_data_netlink_t *ed, uint64_t cts64)
 {
 	gptpipc_gptpd_data_t ipcd;
+	int di;
 	UB_LOG(UBL_INFO, "%s:portIndex=%d\n", __func__, portIndex);
 
 	memset(&ipcd, 0, sizeof(ipcd));
@@ -317,6 +312,17 @@ static int gptpnet_cb_devdown(gptpman_data_t *gpmand, int portIndex,
 	ipcd.u.notice.portIndex=portIndex;
 	gptpnet_ipc_notice(gpmand->gpnetd, &ipcd, sizeof(ipcd));
 	gpmand->tasds[0].ptds[portIndex].ppglb->forAllDomain->portOper=false;
+
+	gpmand->tasds[0].ptds[portIndex].mdeglb->forAllDomain->asCapableAcrossDomains=false;
+	gpmand->tasds[0].ptds[portIndex].ppglb->forAllDomain->receivedNonCMLDSPdelayReq=0;
+	for(di=0;di<gpmand->max_domains;di++){
+		if(!gpmand->tasds[di].ptds[portIndex].ppglb->asCapable) continue;
+		gpmand->tasds[di].ptds[portIndex].ppglb->asCapable = false;
+		gpmand->tasds[di].ptds[portIndex].ppglb->portEventFlags|=
+			GPTPIPC_EVENT_PORT_FLAG_AS_CAPABLE_DOWN;
+		gpmand->tasds[di].ptds[portIndex].ppglb->portEventFlags&=
+			~GPTPIPC_EVENT_PORT_FLAG_AS_CAPABLE_UP;
+	}
 	return 0;
 }
 
@@ -342,24 +348,25 @@ static int gptpnet_cb_timeout(gptpman_data_t *gpmand, uint64_t cts64)
 
 		gpmand->tasds[di].tasglb->asCapableOrAll=false;
 		for(pi=1;pi<gpmand->max_ports;pi++){
-			// the next 3 md_* calls are to check and send defered msg
+			set_asCapable(gpmand->tasds[di].tasglb,  &gpmand->tasds[di].ptds[pi]);
+			gpmand->tasds[di].tasglb->asCapableOrAll |=
+				gpmand->tasds[di].ptds[pi].ppglb->asCapable;
+			smret=gptp_capable_transmit_sm(gpmand->tasds[di].ptds[pi].gctransd, cts64);
+			if(smret) md_signaling_send_sm_mdSignalingSend(
+					gpmand->tasds[di].ptds[pi].mdsigsendd, smret, cts64);
+
+			// The next 4 md_* calls are to check and send defered msg.
+			// However, ensure that this are called after the calling
+			// set_asCapable above so that no defered messages are not sent
+			// after asCapable has been toggled to false already.
 			md_sync_send_sm(gpmand->tasds[di].ptds[pi].mdssendd, cts64);
 			md_announce_send_sm(gpmand->tasds[di].ptds[pi].mdansendd, cts64);
 			md_signaling_send_sm(gpmand->tasds[di].ptds[pi].mdsigsendd, cts64);
 
-			set_asCapable(gpmand->tasds[di].tasglb,  &gpmand->tasds[di].ptds[pi]);
-			gpmand->tasds[di].tasglb->asCapableOrAll |=
-				gpmand->tasds[di].ptds[pi].ppglb->asCapable;
 			md_sync_receive_sm(gpmand->tasds[di].ptds[pi].mdsrecd, cts64);
-			smret=gptp_capable_transmit_sm(gpmand->tasds[di].ptds[pi].gctransd, cts64);
-			if(smret) md_signaling_send_sm_mdSignalingSend(
-				gpmand->tasds[di].ptds[pi].mdsigsendd, smret, cts64);
-                        // asCapable might be set, inform other state machines
+			// asCapable might be set, inform other state machines
 			if(di!=0 && !gpmand->tasds[di].tasglb->domainNumber) continue;
-                        sm_bmcs_domain_port_update(&gpmand->tasds[di].ptds[pi],
-						   gpmand->tasds[di].btasglb,
-						   gpmand->tasds[di].pssd,
-						   gpmand->tasds[di].gmsd, cts64);
+			sm_bmcs_domain_port_update(gpmand, di, pi, cts64);
 		}
 		gm_stable_sm(gpmand->tasds[di].gmsd, cts64);
 	}
@@ -445,11 +452,9 @@ static int gptpnet_cb_recv(gptpman_data_t *gpmand, int portIndex,
 		if(smret){
 			port_announce_receive_sm_recv_announce(
 				gpmand->tasds[di].ptds[portIndex].parecd, smret, cts64);
-			sm_bmcs_perform(&gpmand->tasds[di].ptds[portIndex],
-					gpmand->tasds[di].btasglb, gpmand->tasds[di].pssd,
-					gpmand->tasds[di].gmsd, cts64);
+			sm_bmcs_perform(gpmand, di, portIndex, cts64);
 		}
-                return 0;
+		return 0;
 	case SIGNALING:
 		smret=md_signaling_receive_sm_mdSignalingRec(
 			gpmand->tasds[di].ptds[portIndex].mdsigrecd, ed, cts64);
@@ -469,7 +474,7 @@ static int gptpnet_cb_recv(gptpman_data_t *gpmand, int portIndex,
 				(PTPMsgGPTPCapableTLV *)smret, cts64);
 		}else{
 			UB_LOG(UBL_WARN,"%s:unknown signaling message, stype=%u\n",
-			       __func__, stype);
+			       __func__, (unsigned int)stype);
 		}
 		return 0;
 	default:
@@ -546,6 +551,7 @@ static int ipc_respond_one_clock(gptpnet_data_t *gpnetd,
 	memset(&pd, 0, sizeof(pd));
 	pd.dtype=GPTPIPC_GPTPD_CLOCKD;
 	pd.u.clockd.portIndex=portIndex;
+	pd.u.clockd.adjppb=gptpclock_get_adjppb(portIndex, domainNumber);
 	if(gptpclock_get_ipc_clock_data(portIndex, domainNumber, &pd.u.clockd)){
 		UB_LOG(UBL_WARN, "%s: portIndex=%d, domainNumber=%d, no clock data\n",
 		       __func__, portIndex, domainNumber);
@@ -580,8 +586,7 @@ static int ipc_respond_one_gport(gptpnet_data_t *gpnetd,
 	memcpy(&pd.u.gportd.gmClockId, btasglb->gmPriority.rootSystemIdentity.clockIdentity,
 	       sizeof(ClockIdentity));
 	pd.u.gportd.annPathSequenceCount=bppglb->annPathSequenceCount;
-	if(((int)bppglb->annPathSequenceCount < 0) || bppglb->annPathSequenceCount>=MAX_PATH_TRACE_N)
-		return -1;
+	if(bppglb->annPathSequenceCount>=MAX_PATH_TRACE_N) return -1;
 	memcpy(&pd.u.gportd.annPathSequence, &bppglb->annPathSequence,
 	       bppglb->annPathSequenceCount * sizeof(ClockIdentity));
 	gptpnet_ipc_respond(gpnetd, addr, &pd, sizeof(pd));
@@ -704,16 +709,16 @@ static int ipc_register_abnormal_event(gptpipc_client_req_data_t *reqdata)
 	memset(&aevent,0,sizeof(aevent));
 	aevent.domainNumber=reqdata->domainNumber;
 	aevent.ndevIndex=reqdata->portIndex-1;
-	aevent.msgtype=(PTPMsgType)reqdata->abnd.msgtype;
-	aevent.eventtype=(md_abn_event_type)reqdata->abnd.eventtype;
-	aevent.eventrate=reqdata->abnd.eventrate;
-	aevent.repeat=reqdata->abnd.repeat;
-	aevent.interval=reqdata->abnd.interval;
-	aevent.eventpara=reqdata->abnd.eventpara;
-	if(reqdata->abnd.subcmd==0){
+	aevent.msgtype=(PTPMsgType)reqdata->u.abnd.msgtype;
+	aevent.eventtype=(md_abn_event_type)reqdata->u.abnd.eventtype;
+	aevent.eventrate=reqdata->u.abnd.eventrate;
+	aevent.repeat=reqdata->u.abnd.repeat;
+	aevent.interval=reqdata->u.abnd.interval;
+	aevent.eventpara=reqdata->u.abnd.eventpara;
+	if(reqdata->u.abnd.subcmd==0){
 		return md_abnormal_register_event(&aevent);
 	}
-	if(reqdata->abnd.msgtype==-1){
+	if(reqdata->u.abnd.msgtype==-1){
 		return md_abnormal_deregister_all_events();
 	}
 	return md_abnormal_deregister_msgtype_events(aevent.msgtype);
@@ -893,7 +898,7 @@ static int gptpnet_ipc_cb(void *cbdata, uint8_t *rdata, int size, struct sockadd
 			// clockIndex=0 is the master clock and IPC needs only that info.
 			ipc_respond_one_clock(gpmand->gpnetd,
 					      gpmand->tasds[di].tasglb,
-					      0, di, addr);
+					      0, gpmand->tasds[di].tasglb->domainNumber, addr);
 		}
 		return 0;
 	case GPTPIPC_CMD_REQ_GPORT_INFO:
@@ -947,6 +952,7 @@ static int gptpnet_ipc_cb(void *cbdata, uint8_t *rdata, int size, struct sockadd
 		return 0;
 	case GPTPIPC_CMD_REQ_STAT_INFO_RESET:
 		resetcmd=1;
+		// fall through
 	case GPTPIPC_CMD_REQ_STAT_INFO:
 		ddi=get_domain_index_ipc(gpmand, reqdata);
 		if(reqdata->domainNumber>=0 && ddi<0) return -1;
@@ -989,46 +995,46 @@ static int domain_zero_port_sm_init(gptpsm_tasd_t *tasd, gptpnet_data_t *gpnetd,
 
 static int domain_port_sm_init(gptpsm_tasd_t *tasd, gptpnet_data_t *gpnetd, int di, int pi)
 {
-        port_announce_information_sm_init(&tasd->ptds[pi].painfd, di, pi,
-                                          tasd->tasglb, tasd->ptds[pi].ppglb,
-                                          tasd->btasglb, tasd->ptds[pi].bppglb);
-        port_announce_information_ext_sm_init(&tasd->ptds[pi].paiextd, di, pi,
-                                              tasd->tasglb, tasd->ptds[pi].ppglb,
-                                              tasd->btasglb, tasd->ptds[pi].bppglb);
+	port_announce_information_sm_init(&tasd->ptds[pi].painfd, di, pi,
+			tasd->tasglb, tasd->ptds[pi].ppglb,
+			tasd->btasglb, tasd->ptds[pi].bppglb);
+	port_announce_information_ext_sm_init(&tasd->ptds[pi].paiextd, di, pi,
+			tasd->tasglb, tasd->ptds[pi].ppglb,
+			tasd->btasglb, tasd->ptds[pi].bppglb);
 	if(pi==0) return 0;
 	md_sync_receive_sm_init(&tasd->ptds[pi].mdsrecd,di, pi,	tasd->tasglb,
-				tasd->ptds[pi].ppglb, tasd->ptds[pi].mdeglb);
+			tasd->ptds[pi].ppglb, tasd->ptds[pi].mdeglb);
 	port_sync_sync_receive_sm_init(&tasd->ptds[pi].pssrecd, di, pi, tasd->tasglb,
-				       tasd->ptds[pi].ppglb);
+			tasd->ptds[pi].ppglb);
 	port_sync_sync_send_sm_init(&tasd->ptds[pi].psssendd, di, pi, tasd->tasglb,
-				    tasd->ptds[pi].ppglb);
+			tasd->ptds[pi].ppglb);
 	md_sync_send_sm_init(&tasd->ptds[pi].mdssendd, di, pi, gpnetd, tasd->tasglb,
-			     tasd->ptds[pi].ppglb, tasd->ptds[pi].mdeglb);
-        port_announce_receive_sm_init(&tasd->ptds[pi].parecd, di, pi,
-                                      tasd->tasglb, tasd->ptds[pi].ppglb,
-                                      tasd->btasglb, tasd->ptds[pi].bppglb);
-        port_announce_transmit_sm_init(&tasd->ptds[pi].patransd, di, pi,
-                                       tasd->tasglb, tasd->ptds[pi].ppglb,
-                                       tasd->btasglb, tasd->ptds[pi].bppglb);
+			tasd->ptds[pi].ppglb, tasd->ptds[pi].mdeglb);
+	port_announce_receive_sm_init(&tasd->ptds[pi].parecd, di, pi,
+			tasd->tasglb, tasd->ptds[pi].ppglb,
+			tasd->btasglb, tasd->ptds[pi].bppglb);
+	port_announce_transmit_sm_init(&tasd->ptds[pi].patransd, di, pi,
+			tasd->tasglb, tasd->ptds[pi].ppglb,
+			tasd->btasglb, tasd->ptds[pi].bppglb);
 	gptp_capable_transmit_sm_init(&tasd->ptds[pi].gctransd, di, pi, tasd->tasglb,
-				      tasd->ptds[pi].ppglb);
+			tasd->ptds[pi].ppglb);
 	gptp_capable_receive_sm_init(&tasd->ptds[pi].gcrecd, di, pi, tasd->tasglb,
-				     tasd->ptds[pi].ppglb);
+			tasd->ptds[pi].ppglb);
 	sync_interval_setting_sm_init(&tasd->ptds[pi].sisetd, di, pi, tasd->tasglb,
-				      tasd->ptds[pi].ppglb);
-        announce_interval_setting_sm_init(&tasd->ptds[pi].aisetd, di, pi,
-                                          tasd->tasglb, tasd->ptds[pi].ppglb,
-                                          tasd->ptds[pi].bppglb);
+			tasd->ptds[pi].ppglb);
+	announce_interval_setting_sm_init(&tasd->ptds[pi].aisetd, di, pi,
+			tasd->tasglb, tasd->ptds[pi].ppglb,
+			tasd->ptds[pi].bppglb);
 	one_step_tx_oper_setting_sm_init(&tasd->ptds[pi].ostxopd, di, pi, tasd->tasglb,
-					 tasd->ptds[pi].ppglb, tasd->ptds[pi].mdeglb);
+			tasd->ptds[pi].ppglb, tasd->ptds[pi].mdeglb);
 	md_announce_send_sm_init(&tasd->ptds[pi].mdansendd, di, pi, gpnetd, tasd->tasglb,
-				 tasd->ptds[pi].ppglb, tasd->ptds[pi].bppglb);
+			tasd->ptds[pi].ppglb, tasd->ptds[pi].bppglb);
 	md_announce_receive_sm_init(&tasd->ptds[pi].mdanrecd, di, pi, tasd->tasglb,
-				    tasd->ptds[pi].ppglb);
+			tasd->ptds[pi].ppglb);
 	md_signaling_send_sm_init(&tasd->ptds[pi].mdsigsendd, di, pi, gpnetd, tasd->tasglb,
-				  tasd->ptds[pi].ppglb);
+			tasd->ptds[pi].ppglb);
 	md_signaling_receive_sm_init(&tasd->ptds[pi].mdsigrecd, di, pi, tasd->tasglb,
-				     tasd->ptds[pi].ppglb);
+			tasd->ptds[pi].ppglb);
 	return 0;
 }
 
@@ -1044,7 +1050,7 @@ static int gptpman_port_init(gptpman_data_t *gpmand, uint8_t di, int pi)
 		pp_glb_init(&tasd->ptds[pi].ppglb,
 			    gpmand->tasds[0].ptds[pi].ppglb->forAllDomain, pi);
 	}
-        bmcs_pp_glb_init(&tasd->ptds[pi].bppglb);
+	bmcs_pp_glb_init(&tasd->ptds[pi].bppglb);
 	if(di==0){
 		domain_zero_port_sm_init(tasd, gpmand->gpnetd, pi);
 	}
@@ -1058,8 +1064,8 @@ static int gptpman_port_init(gptpman_data_t *gpmand, uint8_t di, int pi)
 	}
 
 	tasd->ptds[pi].cmldsLinkPortEnabled = true;
-        tasd->ppglbl[pi] = tasd->ptds[pi].ppglb;
-        tasd->bppglbl[pi] = tasd->ptds[pi].bppglb;
+	tasd->ppglbl[pi] = tasd->ptds[pi].ppglb;
+	tasd->bppglbl[pi] = tasd->ptds[pi].bppglb;
 	return 0;
 }
 
@@ -1088,7 +1094,7 @@ int gptpman_domain_init(gptpman_data_t *gpmand, uint8_t domainNumber)
 	}
 	ptas_glb_init(&gpmand->tasds[di].tasglb, domainNumber);
 
-        bmcs_ptas_glb_init(&gpmand->tasds[di].btasglb, gpmand->tasds[di].tasglb);
+	bmcs_ptas_glb_init(&gpmand->tasds[di].btasglb, gpmand->tasds[di].tasglb);
 
 	site_sync_sync_sm_init(&gpmand->tasds[di].sssd, di, gpmand->tasds[di].tasglb);
 	clock_master_sync_send_sm_init(&gpmand->tasds[di].cmssendd, di, gpmand->tasds[di].tasglb);
@@ -1103,11 +1109,11 @@ int gptpman_domain_init(gptpman_data_t *gpmand, uint8_t domainNumber)
 	}
 
 	gm_stable_sm_init(&gpmand->tasds[di].gmsd, di, gpmand->tasds[di].tasglb);
-        port_state_selection_sm_init(&gpmand->tasds[di].pssd, di,
-                                     gpmand->tasds[di].tasglb, gpmand->tasds[di].ppglbl,
-                                     gpmand->tasds[di].btasglb, gpmand->tasds[di].bppglbl,
-                                     gpmand->max_ports,
-                                     &gpmand->tasds[0].pssd);
+	port_state_selection_sm_init(&gpmand->tasds[di].pssd, di,
+			gpmand->tasds[di].tasglb, gpmand->tasds[di].ppglbl,
+			gpmand->tasds[di].btasglb, gpmand->tasds[di].bppglbl,
+			gpmand->max_ports,
+			&gpmand->tasds[0].pssd);
 	return 0;
 }
 
@@ -1116,11 +1122,11 @@ static int all_sm_close(gptpman_data_t *gpmand)
 	int di, pi;
 	for(di=0;di<gpmand->max_domains;di++){
 		for(pi=0;pi<gpmand->max_ports;pi++){
-                        if(gpmand->tasds[di].ptds && gpmand->tasds[di].ptds[pi].bppglb){
-                                bmcs_pp_glb_close(&gpmand->tasds[di].ptds[pi].bppglb);
+			if(gpmand->tasds[di].ptds && gpmand->tasds[di].ptds[pi].bppglb){
+				bmcs_pp_glb_close(&gpmand->tasds[di].ptds[pi].bppglb);
 				pp_glb_close(&gpmand->tasds[di].ptds[pi].ppglb, di);
 				md_entity_glb_close(&gpmand->tasds[di].ptds[pi].mdeglb, di);
-                        }
+			}
 			sm_close_for_domain_port(gpmand, di, pi);
 		}
 		SM_CLOSE(site_sync_sync_sm_close, gpmand->tasds[di].sssd);
@@ -1132,10 +1138,10 @@ static int all_sm_close(gptpman_data_t *gpmand)
 		SM_CLOSE(port_state_selection_sm_close, gpmand->tasds[di].pssd);
 
 		if(gpmand->tasds[di].ptds) free(gpmand->tasds[di].ptds);
-                if(gpmand->tasds[di].ppglbl) free(gpmand->tasds[di].ppglbl);
-                if(gpmand->tasds[di].bppglbl) free(gpmand->tasds[di].bppglbl);
+		if(gpmand->tasds[di].ppglbl) free(gpmand->tasds[di].ppglbl);
+		if(gpmand->tasds[di].bppglbl) free(gpmand->tasds[di].bppglbl);
 		ptas_glb_close(&gpmand->tasds[di].tasglb);
-                bmcs_ptas_glb_close(&gpmand->tasds[di].btasglb);
+		bmcs_ptas_glb_close(&gpmand->tasds[di].btasglb);
 
 	}
 	return 0;
@@ -1190,16 +1196,16 @@ static int init_domain_clock(gptpman_data_t *gpmand, int domainIndex, int domain
 static int set_domain_thisClock(PerTimeAwareSystemGlobal *tasglb, int domainNumber,
 				int thisClockIndex)
 {
+	uint8_t *clockid;
 	tasglb->thisClockIndex=thisClockIndex;
 	gptpclock_set_thisClock(tasglb->thisClockIndex, domainNumber, false);
 
 	/* initialize adjustment rate of the master clock to 0 */
 	gptpclock_setadj(0, thisClockIndex, domainNumber);
 
-	memcpy(tasglb->thisClock,
-	       gptpclock_clockid(tasglb->thisClockIndex, domainNumber),
-	       sizeof(ClockIdentity));
-
+	clockid=gptpclock_clockid(tasglb->thisClockIndex, domainNumber);
+	if(!clockid) return -1;
+	memcpy(tasglb->thisClock, clockid, sizeof(ClockIdentity));
 	return 0;
 }
 
@@ -1225,7 +1231,7 @@ static int static_domains_init(gptpman_data_t *gpmand, char *inittm)
 		gptpclock_setadj(0, this_ci, dn); // Freq. adj=0
 		gptpclock_settime_str(inittm, 0, dn); // Phase set to inittm
 	}
-        bmcs_ptas_glb_update(&gpmand->tasds[di].btasglb,
+	bmcs_ptas_glb_update(&gpmand->tasds[di].btasglb,
 			     gpmand->tasds[di].tasglb, true);
 
 	di=1;
@@ -1243,7 +1249,7 @@ static int static_domains_init(gptpman_data_t *gpmand, char *inittm)
 		gptpclock_setadj(0, this_ci, dn); // Freq. adj=0
 		gptpclock_settime_str(inittm, 0, dn); // Phase set to inittm
 	}
-        bmcs_ptas_glb_update(&gpmand->tasds[di].btasglb,
+	bmcs_ptas_glb_update(&gpmand->tasds[di].btasglb,
 			     gpmand->tasds[di].tasglb, false);
 
 	return 0;
@@ -1257,11 +1263,11 @@ int gptpman_run(char *netdevs[], int max_ports, int max_domains, char *inittm)
 	int res=-1;
 
 	gpmand=malloc(sizeof(gptpman_data_t));
-	ub_assert(gpmand, __func__, "malloc error");
+	ub_assert(gpmand!=NULL, __func__, "malloc error");
 	memset(gpmand, 0, sizeof(gptpman_data_t));
 
-        // provide seed to pseudo random generator rand()
-        srand(time(NULL));
+	// provide seed to pseudo random generator rand()
+	srand(time(NULL));
 
 	if(!max_domains) max_domains=gptpconf_get_intitem(CONF_MAX_DOMAIN_NUMBER);
 	gpmand->max_domains=max_domains;
@@ -1291,13 +1297,13 @@ int gptpman_run(char *netdevs[], int max_ports, int max_domains, char *inittm)
 		gpmand->tasds[i].ptds=malloc(max_ports * sizeof(gptpsm_ptd_t));
 		ub_assert(gpmand->tasds[i].ptds, __func__, "malloc error");
 		memset(gpmand->tasds[i].ptds, 0, max_ports * sizeof(gptpsm_ptd_t));
-                // create per-port global lists
-                gpmand->tasds[i].ppglbl=malloc(max_ports * sizeof(PerPortGlobal*));
-				ub_assert(gpmand->tasds[i].ppglbl, __func__, "malloc error");
-                memset(gpmand->tasds[i].ppglbl, 0, max_ports * sizeof(PerPortGlobal*));
-                gpmand->tasds[i].bppglbl=malloc(max_ports * sizeof(BmcsPerPortGlobal*));
-				ub_assert(gpmand->tasds[i].bppglbl, __func__, "malloc error");
-                memset(gpmand->tasds[i].bppglbl, 0, max_ports * sizeof(BmcsPerPortGlobal*));
+		// create per-port global lists
+		gpmand->tasds[i].ppglbl=malloc(max_ports * sizeof(PerPortGlobal*));
+		ub_assert(gpmand->tasds[i].ppglbl, __func__, "malloc error");
+		memset(gpmand->tasds[i].ppglbl, 0, max_ports * sizeof(PerPortGlobal*));
+		gpmand->tasds[i].bppglbl=malloc(max_ports * sizeof(BmcsPerPortGlobal*));
+		ub_assert(gpmand->tasds[i].bppglbl, __func__, "malloc error");
+		memset(gpmand->tasds[i].bppglbl, 0, max_ports * sizeof(BmcsPerPortGlobal*));
 	}
 
 	if(static_domains_init(gpmand, inittm)) goto erexit;

@@ -115,26 +115,41 @@ static int setFollowUp_txFollowUp(md_sync_send_data_t *sm, uint64_t cts64)
 	int ssize=sizeof(MDPTPMsgFollowUp);
 	PTPMsgHeader head;
 	int64_t dts;
+	int64_t cf;
+	uint32_t tsns, tslsb;
+	uint16_t tsmsb;
 
 	sdata=(MDPTPMsgFollowUp *)gptpnet_get_sendbuf(sm->gpnetd, sm->portIndex-1);
 	memset(sdata, 0, ssize);
 	md_header_template(&head, FOLLOW_UP, ssize,
 			   &RCVD_MDSYNC_PTR->sourcePortIdentity, SYNC_SEQUENCE_ID,
 			   sm->ppg->currentLogSyncInterval);
-	head.correctionField = (RCVD_MDSYNC_PTR->followUpCorrectionField.nsec<<16);
-	head.correctionField += (RCVD_MDSYNC_PTR->rateRatio *
-				 ((sm->sync_ts - RCVD_MDSYNC_PTR->upstreamTxTime.nsec)<<16));
+	if(gptpclock_we_are_gm(sm->domainIndex)){
+		head.correctionField=0;
+		cf = sm->sync_ts - RCVD_MDSYNC_PTR->upstreamTxTime.nsec;
+		// we assume cf<1sec
+	}else{
+		head.correctionField = (RCVD_MDSYNC_PTR->followUpCorrectionField.nsec<<16);
+		head.correctionField += (RCVD_MDSYNC_PTR->rateRatio *
+					 ((sm->sync_ts -
+					   RCVD_MDSYNC_PTR->upstreamTxTime.nsec)<<16));
+		cf=0;
+	}
 
 	head.domainNumber = RCVD_MDSYNC_PTR->domainNumber;
 
 	md_compose_head(&head, (MDPTPMsgHeader *)sdata);
 
-	sdata->preciseOriginTimestamp.seconds_msb_ns =
-		htons(RCVD_MDSYNC_PTR->preciseOriginTimestamp.seconds.msb);
-	sdata->preciseOriginTimestamp.seconds_lsb_nl =
-		htonl(RCVD_MDSYNC_PTR->preciseOriginTimestamp.seconds.lsb);
-	sdata->preciseOriginTimestamp.nanoseconds_nl =
-		htonl(RCVD_MDSYNC_PTR->preciseOriginTimestamp.nanoseconds);
+	tsmsb=RCVD_MDSYNC_PTR->preciseOriginTimestamp.seconds.msb;
+	tslsb=RCVD_MDSYNC_PTR->preciseOriginTimestamp.seconds.lsb;
+	tsns=RCVD_MDSYNC_PTR->preciseOriginTimestamp.nanoseconds+cf;
+	if(tsns>=UB_SEC_NS){
+		tsns-=UB_SEC_NS;
+		if(++tslsb==0) tsmsb++;
+	}
+	sdata->preciseOriginTimestamp.seconds_msb_ns = htons(tsmsb);
+	sdata->preciseOriginTimestamp.seconds_lsb_nl = htonl(tslsb);
+	sdata->preciseOriginTimestamp.nanoseconds_nl = htonl(tsns);
 
 	md_followup_information_tlv_compose(&sdata->FUpInfoTLV,
 					    RCVD_MDSYNC_PTR->rateRatio,

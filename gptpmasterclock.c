@@ -219,7 +219,7 @@ int gptpmasterclock_get_domain_ts64(int64_t *ts64, int domainIndex)
 	if(gptpmasterclock_health_check(domainIndex)) return -1;
 	if(domainIndex<0 || domainIndex>=gmcd.max_domains) return -1;
 	gptpclock_mutex_trylock(&gmcd.shm->head.mcmutex);
-	GPTP_CLOCK_GETTIMEMS(gmcd.ptpfds[domainIndex], *ts64);
+	PTPDEV_CLOCK_GETTIME(gmcd.ptpfds[domainIndex], *ts64);
 
 	adjrate=gmcd.shm->gcpp[domainIndex].adjrate;
 	if(adjrate != 0.0){

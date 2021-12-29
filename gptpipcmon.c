@@ -24,7 +24,6 @@
 #include <errno.h>
 #include <stdio.h>
 #include "gptpbasetypes.h"
-#include "gptp_defaults.h"
 #include "gptpipc.h"
 #include "mdeth.h"
 #include "md_abnormal_hooks.h"
@@ -150,24 +149,24 @@ static int ipc_register_abnormal_event(int ipcfd, char *rbuf)
 
 	memset(&cd, 0, sizeof(cd));
 	cd.cmd=GPTPIPC_CMD_REG_ABNORMAL_EVENT;
-	if(rbuf[0]=='a') cd.abnd.subcmd=1;
+	if(rbuf[0]=='a') cd.u.abnd.subcmd=1;
 	res=sscanf(rbuf+1, "%d,%d,%m[a-z],%m[a-z],%f,%d,%d,%d",
 		   &cd.domainNumber, &cd.portIndex,
 		   &msgtype, &eventtype,
-		   &cd.abnd.eventrate, &cd.abnd.repeat, &cd.abnd.interval,
-		   &cd.abnd.eventpara);
+		   &cd.u.abnd.eventrate, &cd.u.abnd.repeat, &cd.u.abnd.interval,
+		   &cd.u.abnd.eventpara);
 	if(res<4) {
-		if(!cd.abnd.subcmd){
+		if(!cd.u.abnd.subcmd){
 			UB_LOG(UBL_ERROR, "%s:number of parameters=%d is wrong\n",__func__,res);
 			goto erexit;
 		}
-		cd.abnd.msgtype=-1;
+		cd.u.abnd.msgtype=-1;
 	}
 	if(res>=3){
 		for(i=0;;i++){
 			if(!msgtstr[i]) goto erexit;
 			if(strcmp(msgtype,msgtstr[i])==0){
-				cd.abnd.msgtype=msgtint[i];
+				cd.u.abnd.msgtype=msgtint[i];
 				break;
 			}
 		}
@@ -176,15 +175,15 @@ static int ipc_register_abnormal_event(int ipcfd, char *rbuf)
 		for(i=0;;i++){
 			if(!eventtstr[i]) goto erexit;
 			if(strcmp(eventtype,eventtstr[i])==0){
-				cd.abnd.eventtype=eventtint[i];
+				cd.u.abnd.eventtype=eventtint[i];
 				break;
 			}
 		}
 	}
-	if(res<5) cd.abnd.eventrate=1.0;
-	if(res<6) cd.abnd.repeat=0;
-	if(res<7) cd.abnd.interval=0;
-	if(res<8) cd.abnd.eventpara=0;
+	if(res<5) cd.u.abnd.eventrate=1.0;
+	if(res<6) cd.u.abnd.repeat=0;
+	if(res<7) cd.u.abnd.interval=0;
+	if(res<8) cd.u.abnd.eventpara=0;
 	rval=0;
 	res=write(ipcfd, &cd, sizeof(cd));
 	if(res!=sizeof(cd)){

@@ -134,15 +134,15 @@ static int portStateUpdate(port_state_selection_data_t *sm,
 		// update the global pathTrace
 		N = bppgl->annPathSequenceCount < MAX_PATH_TRACE_N ?
 			bppgl->annPathSequenceCount : MAX_PATH_TRACE_N;
-		if(N+1 < MAX_PATH_TRACE_N){
+		if(N+1 <= MAX_PATH_TRACE_N){
 			// copy pathSequence to pathTrace
 			memcpy(PATH_TRACE, &bppgl->annPathSequence, sizeof(ClockIdentity)*N);
 			// append thisClock to pathTrace
 			memcpy(&(PATH_TRACE[N]), sm->ptasg->thisClock, sizeof(ClockIdentity));
 			sm->bptasg->pathTraceCount = N+1;
 		}else{
-			UB_LOG(UBL_WARN, "port_state_selection:%s:pathTrace=%d exceeds limit=%d\n",
-			       __func__, N, MAX_PATH_TRACE_N);
+			UB_LOG(UBL_WARN, "port_state_selection:%s:pathTrace=%d (including thisClock) exceeds limit=%d\n",
+			       __func__, N+1, MAX_PATH_TRACE_N);
 			/* 10.3.8.23 ... a path trace TLV is not appended to an Announce message
 			   and the pathTrace array is empty, once appending a clockIdentity
 			   to the TLV would cause the frame carrying the Announce to exceed
@@ -155,6 +155,17 @@ static int portStateUpdate(port_state_selection_data_t *sm,
 	return 0;
 }
 
+static void update_lastGmInfo(PerTimeAwareSystemGlobal *ptasg)
+{
+	ptasg->gmTimeBaseIndicator++;
+	memset(&ptasg->lastGmPhaseChange, 0, sizeof(ScaledNs));
+	if(gptpconf_get_intitem(CONF_RESET_FREQADJ_BECOMEGM))
+		ptasg->lastGmFreqChange =
+			(double)(-gptpclock_get_adjppb(0, ptasg->domainNumber))	/ 1.0E9;
+	else
+		ptasg->lastGmFreqChange = 0.0;
+}
+
 static void *updtStatesTree(port_state_selection_data_t *sm, int64_t cts64)
 {
 	int i;
@@ -162,6 +173,7 @@ static void *updtStatesTree(port_state_selection_data_t *sm, int64_t cts64)
 	bool slavePortAvail = false;
 	Enumeration2 oldState;
 	void *rval=NULL;
+	bool gmchange=false;
 
 	/* 10.3.12.2.3 */
 	// compute gmPathPriority vector for each port
@@ -220,6 +232,7 @@ static void *updtStatesTree(port_state_selection_data_t *sm, int64_t cts64)
 			 UB_ARRAY_B8(GM_PRIORITY.rootSystemIdentity.clockIdentity));
 		gptpclock_set_gmchange(sm->ptasg->domainNumber,
 				       GM_PRIORITY.rootSystemIdentity.clockIdentity);
+		gmchange=true;
 		rval=GM_PRIORITY.rootSystemIdentity.clockIdentity;
 	}
 
@@ -276,6 +289,7 @@ static void *updtStatesTree(port_state_selection_data_t *sm, int64_t cts64)
 		SELECTED_STATE[0] = PassivePort; // we are not GM
 	}else{
 		SELECTED_STATE[0] = SlavePort; // we are GM
+		if(gmchange) update_lastGmInfo(sm->ptasg);
 	}
 	if(oldState != SELECTED_STATE[0]){
 		UB_LOG(UBL_DEBUG, "port_state_selection:%s: domainIndex=%d portIndex=0 "

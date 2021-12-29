@@ -19,16 +19,17 @@
 # <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
 #
 PACKAGENAME=xl4gptp
-VERSION=1.1.1
+VERSION=1.2.0
 DESCRIPTION=Excelfore gptp daemon and libary
 
 ACLOCAL_AMFLAGS = -I m4
-AM_CFLAGS = -Wall -include gptp_private.h \
+AM_LDFLAGS =
+AM_CFLAGS = -Wall -Wextra -Wno-unused-parameter -include gptp_private.h \
 	-DXL4PKGVERSION=\"$(VERSION)-`cd $(srcdir);echo opensrc`\"
 
 if BUILD_IN_STPL
 AM_CFLAGS += -I$(srcdir)/..
-AM_LDFLAGS = -L../xl4unibase/.libs -L../xl4combase/.libs
+AM_LDFLAGS += -L../xl4unibase/.libs -L../xl4combase/.libs
 UB_GENCONF = $(srcdir)/../xl4unibase/ub_genconf.py
 DOC_DIR = $(abs_srcdir)/../xl4unibase/doc
 else # BUILD_IN_STPL
@@ -39,9 +40,7 @@ endif # BUILD_IN_STPL
 pkgincludedir=$(includedir)/xl4tsn/gptp2
 docdir=${datarootdir}/doc/xl4tsn/gptp2
 
-if LINUX_PTPCLOCK
-AM_CFLAGS += -DLINUX_PTPCLOCK
-endif
+AM_CFLAGS += -D_GNU_SOURCE
 
 lib_LTLIBRARIES = libx4gptp2.la
 GPTP2_SOURCES = ll_gptpsupport.h \
@@ -78,66 +77,93 @@ GPTP2_SOURCES = ll_gptpsupport.h \
 	gptpconf_values_test.c \
 	md_abnormal_hooks.c md_abnormal_hooks.h
 
-bin_PROGRAMS = gptp2d gptpipcmon
-check_PROGRAMS = freqadj_unittest gptpcommon_unittest md_abnormal_hooks_unittest \
-	gptpmasterclock_response
+bin_PROGRAMS = gptp2d set_ptpclock gptpipcmon
+check_PROGRAMS = gptpcommon_unittest
+TESTS = gptpcommon_unittest
+GPTP2_LDADD = -lx4unibase -lx4combase
 
-if LINUX_PTPCLOCK
-  dist_bin_SCRIPTS = gptpipc_extscript
-  GPTP2_SOURCES += posix/ix_ll_gptpsupport.c
-  GPTP2_SOURCES += posix/ix_gptpnet.c posix/ix_gptpclock.c
-  check_PROGRAMS += ix_gptpclock_unittest ix_gptpnet_unittest
+dist_bin_SCRIPTS = gptpipc_extscript
+GPTP2_SOURCES += posix/ix_ll_gptpsupport.c
+
+AM_CFLAGS += -D_GNU_SOURCE
+
+if EKF_ARMADA
+  GPTP2_SOURCES += armada/ekf/ix_armada_gptpnet.c armada/ekf/ix_armada_gptpclock.c
+  AM_CFLAGS += -DEKFARMADA_PLATFORM
+if BUILD_IN_STPL
+  AM_LDFLAGS += -L../xl4pfutils/.libs
+endif # end of EKF_ARMADA && BUILD_IN_STPL
+  GPTP2_LDADD += -lpfutils -lsmi -ldevmem
+else # default platform
+  AM_CFLAGS += -DPTP_VIRTUAL_CLOCK_SUPPORT
+  GPTP2_SOURCES += posix/ix_gptpnet.c posix/ix_gptpclock.c posix/ix_ptpdevclock.c \
+      gptpclock_virtual.c gptpclock_virtual.h
+
+  check_PROGRAMS += freqadj_unittest ix_gptpclock_unittest ix_gptpnet_unittest \
+      gptpmasterclock_response md_abnormal_hooks_unittest
+  TESTS += freqadj_unittest ix_gptpclock_unittest md_abnormal_hooks_unittest gptp2_test_run.sh
 
   ix_gptpnet_unittest_SOURCES = posix/ix_gptpnet_unittest.c $(GPTP2_SOURCES)
   ix_gptpnet_unittest_CFLAGS = $(AM_CFLAGS)
-  ix_gptpnet_unittest_LDADD = -lpthread -lx4unibase -lx4combase
+  ix_gptpnet_unittest_LDADD = -lpthread $(GPTP2_LDADD)
 
   ix_gptpclock_unittest_SOURCES = posix/ix_gptpclock_unittest.c  $(GPTP2_SOURCES)
   ix_gptpclock_unittest_CFLAGS = $(AM_CFLAGS)
-  ix_gptpclock_unittest_LDADD = -lpthread -lx4unibase -lx4combase -lcmocka
+  ix_gptpclock_unittest_LDADD = -lpthread $(GPTP2_LDADD) -lcmocka
+
+  freqadj_unittest_SOURCES = freqadj_unittest.c gptp_config.c gptpclock.c \
+	posix/ix_gptpclock.c posix/ix_ptpdevclock.c gptpclock_virtual.c
+  freqadj_unittest_CFLAGS = $(AM_CFLAGS)
+  freqadj_unittest_LDADD = -lpthread $(GPTP2_LDADD) -lcmocka
+
+  gptpmasterclock_response_SOURCES = gptpmasterclock_response.c
+  gptpmasterclock_response_CFLAGS = $(AM_CFLAGS)
+  gptpmasterclock_response_LDADD =  libx4gptp2.la
+
+  md_abnormal_hooks_unittest_SOURCES =  md_abnormal_hooks_unittest.c $(GPTP2_SOURCES)
+  md_abnormal_hooks_unittest_CFLAGS = $(AM_CFLAGS)
+  md_abnormal_hooks_unittest_LDADD = -lpthread $(GPTP2_LDADD) -lcmocka
+
+  bin_PROGRAMS += gptpclock_monitor
+  gptpclock_monitor_SOURCES = gptpclock_monitor.c
+  gptpclock_monitor_CFLAGS = $(AM_CFLAGS)
+  gptpclock_monitor_LDADD =  libx4gptp2.la $(GPTP2_LDADD)
+
+  libx4gptp2_la_SOURCES = gptpmasterclock.c gptpmasterclock.h \
+	gptpipc.c gptpipc.h posix/ix_ptpdevclock.c
+  libx4gptp2_la_LIBADD = $(GPTP2_LDADD)
 
 if HAVE_SYSIO
   bin_PROGRAMS += gptp_sync_pout
   gptp_sync_pout_SOURCES = gptp_sync_pout.c
   gptp_sync_pout_CFLAGS = $(AM_CFLAGS)
-  gptp_sync_pout_LDADD =  libx4gptp2.la -lx4unibase -lx4combase
+  gptp_sync_pout_LDADD =  libx4gptp2.la $(GPTP2_LDADD)
 endif
 
-  bin_PROGRAMS += gptpclock_monitor
-  gptpclock_monitor_SOURCES = gptpclock_monitor.c
-  gptpclock_monitor_CFLAGS = $(AM_CFLAGS)
-  gptpclock_monitor_LDADD =  libx4gptp2.la -lx4unibase -lx4combase
-
-  libx4gptp2_la_SOURCES = gptpmasterclock.c gptpmasterclock.h gptpipc.c gptpipc.h
-  libx4gptp2_la_LIBADD = -lx4unibase -lx4combase
-
-  freqadj_unittest_SOURCES = freqadj_unittest.c gptp_config.c gptpclock.c posix/ix_gptpclock.c
-  freqadj_unittest_CFLAGS = $(AM_CFLAGS)
-  freqadj_unittest_LDADD = -lpthread -lx4unibase -lx4combase -lcmocka
-endif
+endif # end of default platform
 
 gptp2d_SOURCES = gptp2d.c $(GPTP2_SOURCES)
 gptp2d_CFLAGS = $(AM_CFLAGS)
-gptp2d_LDADD = -lm -lpthread -lx4unibase -lx4combase
+gptp2d_LDADD = -lm -lpthread $(GPTP2_LDADD)
 
-TESTS = gptpcommon_unittest freqadj_unittest ix_gptpclock_unittest \
-	md_abnormal_hooks_unittest gptp2_test_run.sh
 gptpcommon_unittest_SOURCES = gptpcommon_unittest.c $(GPTP2_SOURCES)
 gptpcommon_unittest_CFLAGS = $(AM_CFLAGS)
-gptpcommon_unittest_LDADD = -lpthread -lx4unibase -lx4combase -lcmocka
+gptpcommon_unittest_LDADD = -lpthread $(GPTP2_LDADD) -lcmocka
+
 gptpipcmon_SOURCES = gptpipc.c gptpipcmon.c
 gptpipcmon_CFLAGS = $(AM_CFLAGS)
-gptpipcmon_LDADD = -lpthread -lx4unibase -lx4combase
-md_abnormal_hooks_unittest_SOURCES =  md_abnormal_hooks_unittest.c $(GPTP2_SOURCES)
-md_abnormal_hooks_unittest_CFLAGS = $(AM_CFLAGS)
-md_abnormal_hooks_unittest_LDADD = -lpthread -lx4unibase -lx4combase -lcmocka
-gptpmasterclock_response_SOURCES = gptpmasterclock_response.c
-gptpmasterclock_response_CFLAGS = $(AM_CFLAGS)
-gptpmasterclock_response_LDADD =  libx4gptp2.la
+gptpipcmon_LDADD = -lpthread $(GPTP2_LDADD)
 
+set_ptpclock_SOURCES = set_ptpclock.c
+set_ptpclock_CFLAGS = $(AM_CFLAGS)
 
 # public header for the library
 pkginclude_HEADERS = gptpbasetypes.h gptpmasterclock.h gptpipc.h
+
+GENERATED_FILES = gptp_config.c gptp_config.h gptpconf_values_test.c \
+	gptp2_debug_defs.c gptp2.conf
+
+BUILT_SOURCES = $(GENERATED_FILES)
 
 gptp2d.c: gptp_config.c gptp_config.h gptpconf_values_test.c
 gptp_config.c gptp_config.h gptpconf_values_test.c: gptp_defaults.h
@@ -159,7 +185,10 @@ $(srcdir)/gptp2.conf: gptp_defaults.h
 sysconf_DATA = gptp2.conf
 
 deb:
-	@cd $(srcdir); make -f debian.make
+	@cd $(srcdir); make DEB_BUILD_OPTIONS=nocheck -f debian.make
+
+clean-local:
+	cd $(srcdir); rm -f $(GENERATED_FILES)
 
 DOC_HTML_INDEX=$(srcdir)/docoutput/html/index.html
 DOC_LATEC_REFMAN=$(srcdir)/docoutput/latex/refman.pdf
@@ -210,3 +239,12 @@ uninstall-pdf:
 	if [ -d $(DESTDIR)$(docdir) -a -z "`ls -A $(DESTDIR)$(docdir)`" ]; then \
 		rmdir $(DESTDIR)$(docdir); \
 	fi
+
+
+
+CPPCHECK_TST_TARGET = $(gptp2d_SOURCES)
+CPPCHECK_TST_TARGET += $(gptp_sync_pout_SOURCES) $(gptpclock_monitor_SOURCES)
+CPPCHECK_TST_TARGET += $(gptpclock_monitor_SOURCES)
+CPPCHECK_TST_TARGET += $(libx4gptp2_la_SOURCES)
+CPPCHECK_TST_TARGET += $(freqadj_unittest_SOURCES)
+-include $(srcdir)/make_cppcheck.mk

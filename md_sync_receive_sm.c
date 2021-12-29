@@ -67,11 +67,11 @@ static MDSyncReceive *setMDSyncReceive(md_sync_receive_data_t *sm)
 {
 	sm->mdSyncReceive.domainNumber = RCVD_SYNC_PTR->head.domainNumber;
 	sm->mdSyncReceive.followUpCorrectionField.nsec =
-		(UB_NTOHLL(RCVD_SYNC_PTR->head.correctionField_nll)>>16);
+		(UB_NTOHLL((uint64_t)RCVD_SYNC_PTR->head.correctionField_nll)>>16);
 
 	if(TWO_STEP_FLAG){
 		sm->mdSyncReceive.followUpCorrectionField.nsec +=
-			(UB_NTOHLL(RCVD_FOLLOWUP_PTR->head.correctionField_nll)>>16);
+			(UB_NTOHLL((uint64_t)RCVD_FOLLOWUP_PTR->head.correctionField_nll)>>16);
 		sm->mdSyncReceive.preciseOriginTimestamp.seconds.lsb =
 			(uint64_t)ntohl(RCVD_FOLLOWUP_PTR->preciseOriginTimestamp.seconds_lsb_nl);
 		sm->mdSyncReceive.preciseOriginTimestamp.seconds.msb =
@@ -85,11 +85,21 @@ static MDSyncReceive *setMDSyncReceive(md_sync_receive_data_t *sm)
 				    -41);
 		sm->mdSyncReceive.gmTimeBaseIndicator =
 			ntohs(RCVD_FOLLOWUP_PTR->FUpInfoTLV.gmTimeBaseIndicator_ns);
+
+		/* 10.2.2.1.10 lastGmPhaseChange (ScaledNs
+		 * The lastGmPhaseChange is the value of the lastGmPhaseChange member
+		 * of the most recently received PortSyncSync structure...
+		 * It is set equal to the lastGmPhaseChange of the received
+		 * time-synchronization information.
+		 * Both have MDScaledNs structure, copy the value as is. */
+		sm->mdSyncReceive.lastGmPhaseChange.nsec_msb =
+			ntohs(RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_msb);
 		sm->mdSyncReceive.lastGmPhaseChange.nsec =
 			(int64_t)UB_NTOHLL(
-				RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll);
-		sm->mdSyncReceive.lastGmPhaseChange.nsec_msb =
-			RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll<0?-1:0;
+				(uint64_t)RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll);
+		sm->mdSyncReceive.lastGmPhaseChange.subns =
+			ntohs(RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.subns_ns);
+
 		sm->mdSyncReceive.lastGmFreqChange =
 			ldexp((int32_t)ntohl(
 				      RCVD_FOLLOWUP_PTR->FUpInfoTLV.scaledLastGmFreqChange_nl),
@@ -108,11 +118,13 @@ static MDSyncReceive *setMDSyncReceive(md_sync_receive_data_t *sm)
 				    -41);
 		sm->mdSyncReceive.gmTimeBaseIndicator =
 			ntohs(RCVD_SYNC_ONESETP_PTR->FUpInfoTLV.gmTimeBaseIndicator_ns);
+		sm->mdSyncReceive.lastGmPhaseChange.nsec_msb =
+			ntohs(RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_msb);
 		sm->mdSyncReceive.lastGmPhaseChange.nsec =
 			(int64_t)UB_NTOHLL(
-				RCVD_SYNC_ONESETP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll);
-		sm->mdSyncReceive.lastGmPhaseChange.nsec_msb =
-			RCVD_SYNC_ONESETP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll<0?-1:0;
+				(uint64_t)RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.nsec_nll);
+		sm->mdSyncReceive.lastGmPhaseChange.subns =
+			ntohs(RCVD_FOLLOWUP_PTR->FUpInfoTLV.lastGmPhaseChange.subns_ns);
 		sm->mdSyncReceive.lastGmFreqChange =
 			ldexp((int32_t)
 			      ntohl(RCVD_SYNC_ONESETP_PTR->FUpInfoTLV.scaledLastGmFreqChange_nl),
@@ -126,11 +138,11 @@ static MDSyncReceive *setMDSyncReceive(md_sync_receive_data_t *sm)
 		ntohs(RCVD_SYNC_PTR->head.sourcePortIdentity.portNumber_ns);
 	sm->mdSyncReceive.logMessageInterval = RCVD_SYNC_PTR->head.logMessageInterval;
 
-	sm->mdSyncReceive.upstreamTxTime.nsec = sm->rts -
+	sm->mdSyncReceive.upstreamTxTime.nsec = (sm->rts -
 		((double)sm->ppg->forAllDomain->neighborPropDelay.nsec /
 		 sm->ppg->forAllDomain->neighborRateRatio) -
 		((double)sm->ppg->forAllDomain->delayAsymmetry.nsec /
-		 sm->mdSyncReceive.rateRatio);
+		 sm->mdSyncReceive.rateRatio));
 	return &sm->mdSyncReceive;
 }
 
@@ -152,7 +164,7 @@ static md_sync_receive_state_t allstate_condition(md_sync_receive_data_t *sm)
 
 static void *discard_proc(md_sync_receive_data_t *sm)
 {
-	UB_LOG(UBL_DEBUG, "md_sync_receive:%s:domainIndex=%d, portIndex=%d\n",
+	UB_LOG(UBL_DEBUGV, "md_sync_receive:%s:domainIndex=%d, portIndex=%d\n",
 		__func__, sm->domainIndex, sm->portIndex);
 	RCVD_SYNC = false;
 	RCVD_FOLLOWUP = false;

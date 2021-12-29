@@ -32,7 +32,7 @@ static void get_tsrp(int ptpfd, uint64_t *tsr, uint64_t *tsp)
 
 static void test_one_adjust(int ptpfd, int adjppb)
 {
-	uint64_t tsr1, tsp1, tsr2, tsp2;
+	uint64_t tsr1, tsp1=0, tsr2, tsp2=0;
 	int64_t dr,dp;
 	int64_t rppm, dppb;
 	gptp_clock_adjtime(ptpfd, adjppb);
@@ -45,13 +45,13 @@ static void test_one_adjust(int ptpfd, int adjppb)
 	printf("adj=%dppm, RC:%"PRIi64", PC:%"PRIi64", rate=%"PRIi64"ppm\n",
 	       adjppb/1000, dr, dp, rppm);
 	dppb=(adjppb==0)?2000:adjppb/25;
-	assert_true(abs(rppm) <= abs((adjppb+dppb)/1000));
-	if(adjppb) assert_true(abs(rppm) >= abs((adjppb-dppb)/1000));
+	assert_true(labs(rppm) <= labs((adjppb+dppb)/1000));
+	if(adjppb) assert_true(labs(rppm) >= labs((adjppb-dppb)/1000));
 }
 
 static void test_two_adjust(int ptpfd1, int ptpfd2, int adjppba, int adjppbb)
 {
-	uint64_t tsr1, tspa1, tsr2, tspa2, tspb1, tspb2;
+	uint64_t tsr1, tspa1=0, tsr2, tspa2=0, tspb1, tspb2;
 	int64_t dr, dpa, dpb;
 	int64_t rppma, dppba, rppmb, dppbb;
 	gptp_clock_adjtime(ptpfd1, adjppba);
@@ -72,10 +72,10 @@ static void test_two_adjust(int ptpfd1, int ptpfd2, int adjppba, int adjppbb)
 	       adjppbb/1000, dr, dpb, rppmb);
 	dppba=(adjppba==0)?2000:adjppba/25;
 	dppbb=(adjppbb==0)?2000:adjppbb/25;
-	assert_true(abs(rppma) <= abs((adjppba+dppba)/1000));
-	if(adjppba) assert_true(abs(rppma) >= abs((adjppba-dppba)/1000));
-	assert_true(abs(rppmb) <= abs((adjppbb+dppbb)/1000));
-	if(adjppbb) assert_true(abs(rppmb) >= abs((adjppbb-dppbb)/1000));
+	assert_true(labs(rppma) <= labs((adjppba+dppba)/1000));
+	if(adjppba) assert_true(labs(rppma) >= labs((adjppba-dppba)/1000));
+	assert_true(labs(rppmb) <= labs((adjppbb+dppbb)/1000));
+	if(adjppbb) assert_true(labs(rppmb) >= labs((adjppbb-dppbb)/1000));
 }
 
 static void test_adjustment(void **state)

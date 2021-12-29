@@ -74,6 +74,12 @@ static void *setPSSyncCMSS(clock_master_sync_send_data_t *sm)
 	sm->portSyncSync.gmTimeBaseIndicator = sm->ptasg->clockSourceTimeBaseIndicator;
 	sm->portSyncSync.lastGmPhaseChange = sm->ptasg->clockSourceLastGmPhaseChange;
 	sm->portSyncSync.lastGmFreqChange = sm->ptasg->clockSourceLastGmFreqChange;
+
+	/* syncNextSendTimeoutTime from ClockMasterSyncSend can be indefinite, is
+	 * not expected to miss or lose sending of Sync when we are ClockMaster
+	 */
+	sm->portSyncSync.syncNextSendTimeoutTime.nsec = 0xffffffffffffffff;
+
 	return &sm->portSyncSync;
 }
 

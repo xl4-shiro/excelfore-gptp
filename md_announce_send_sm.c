@@ -53,44 +53,59 @@ struct md_announce_send_data{
 
 static int sendAnnounce(md_announce_send_data_t *sm)
 {
-        MDPTPMsgAnnounce *sdata;
-        int N;
-        int ssize=sizeof(MDPTPMsgAnnounce);
+	MDPTPMsgAnnounce *sdata;
+	int N;
+	int ssize=sizeof(MDPTPMsgAnnounce);
 
-        // truncate uncessary container */
-        N = TXANN->tlvLength / sizeof(ClockIdentity);
-        ssize=ssize-((MAX_PATH_TRACE_N-N)*sizeof(ClockIdentity));
-        sdata=md_header_compose(sm->gpnetd, sm->portIndex, ANNOUNCE, ssize,
-                                sm->ptasg->thisClock,
-                                sm->ppg->thisPort,
-                                TXANN->header.sequenceId,
-                                sm->bppg->currentLogAnnounceInterval);
-        if(!sdata) return -1;
+	// truncate uncessary container */
+	N = TXANN->tlvLength / sizeof(ClockIdentity);
+	ssize=ssize-((MAX_PATH_TRACE_N-N)*sizeof(ClockIdentity));
+	sdata=md_header_compose(sm->gpnetd, sm->portIndex, ANNOUNCE, ssize,
+			sm->ptasg->thisClock,
+			sm->ppg->thisPort,
+			TXANN->header.sequenceId,
+			sm->bppg->currentLogAnnounceInterval);
+	if(!sdata) return -1;
 	sdata->head.domainNumber=sm->ptasg->domainNumber;
-        sdata->head.flags[0] = TXANN->header.flags[0];
-        sdata->head.flags[1] = TXANN->header.flags[1];
-        sdata->currentUtcOffset_ns = htons(TXANN->currentUtcOffset);
-        sdata->grandmasterPriority1 = TXANN->grandmasterPriority1;
-        sdata->grandmasterClockQuality.clockClass =
+	sdata->head.flags[0] = TXANN->header.flags[0];
+	sdata->head.flags[1] = TXANN->header.flags[1];
+	sdata->currentUtcOffset_ns = htons(TXANN->currentUtcOffset);
+	sdata->grandmasterPriority1 = TXANN->grandmasterPriority1;
+	sdata->grandmasterClockQuality.clockClass =
 		TXANN->grandmasterClockQuality.clockClass;
-        sdata->grandmasterClockQuality.clockAccuracy =
+	sdata->grandmasterClockQuality.clockAccuracy =
 		TXANN->grandmasterClockQuality.clockAccuracy;
-        sdata->grandmasterClockQuality.offsetScaledLogVariance_ns =
-                htons(TXANN->grandmasterClockQuality.offsetScaledLogVariance);
-        sdata->grandmasterPriority2 = TXANN->grandmasterPriority2;
-        memcpy(&sdata->grandmasterIdentity, &TXANN->grandmasterIdentity,
-	       sizeof(ClockIdentity));
-        sdata->stepsRemoved_ns = htons(TXANN->stepsRemoved);
-        sdata->timeSource = TXANN->timeSource;
-        sdata->tlvType_ns = htons(TXANN->tlvType);
-        sdata->tlvLength_ns = htons(TXANN->tlvLength);
-        if (TXANN->tlvLength > 0){
-                memcpy(&sdata->pathSequence, &TXANN->pathSequence, sizeof(ClockIdentity) * N);
-        }
+	sdata->grandmasterClockQuality.offsetScaledLogVariance_ns =
+		htons(TXANN->grandmasterClockQuality.offsetScaledLogVariance);
+	sdata->grandmasterPriority2 = TXANN->grandmasterPriority2;
+	memcpy(&sdata->grandmasterIdentity, &TXANN->grandmasterIdentity,
+			sizeof(ClockIdentity));
+	sdata->stepsRemoved_ns = htons(TXANN->stepsRemoved);
+	sdata->timeSource = TXANN->timeSource;
+	sdata->tlvType_ns = htons(TXANN->tlvType);
+	sdata->tlvLength_ns = htons(TXANN->tlvLength);
+	if (TXANN->tlvLength > 0){
+		memcpy(&sdata->pathSequence, &TXANN->pathSequence, sizeof(ClockIdentity) * N);
+	} else {
+		/* 802.1AS and AVNU differs in the behavior when there is no PathTrace
+		 * TLV appended in the Announce message.
+		 * 802.1AS requires the PathTrace field to exist, with length=0 to
+		 * indicate empty PathTrace.
+		 * But AVNU, requires the PathTrace field to be absent in cases where
+		 * there is no PathTrace TLV.
+		 *
+		 * Check configuration if it is necessary to conform with AVNU.
+		 */
+		if(sm->ptasg->conformToAvnu){
+			// truncate PathTrace field
+			ssize-=sizeof(sdata->tlvType_ns);
+			ssize-=sizeof(sdata->tlvLength_ns);
+		}
+	}
 
-        if(gptpnet_send_whook(sm->gpnetd, sm->portIndex-1, ssize)==-1) return -2;
+	if(gptpnet_send_whook(sm->gpnetd, sm->portIndex-1, ssize)==-1) return -2;
 	sm->statd.announce_send++;
-        return 0;
+	return 0;
 }
 
 static md_announce_send_state_t allstate_condition(md_announce_send_data_t *sm)

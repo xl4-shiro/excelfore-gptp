@@ -36,6 +36,8 @@ AC_ARG_ENABLE([unittest_memtest],
 	AS_HELP_STRING([--enable-unittest-memtest],[check memory leak in unittest]))
 AC_ARG_ENABLE([sja1105_linux],
 	AS_HELP_STRING([--enable-sja1105-linux],[enable sja1105 linux mode]))
+AC_ARG_ENABLE([ekf_armada],
+	AS_HELP_STRING([--enable-ekf-armada],[enable EKF ARMADA board variation]))
 AC_ARG_ENABLE([understpl],
 	AS_HELP_STRING([--enable-understpl],[enable understpl mode build]))
 
@@ -60,15 +62,21 @@ AM_CONDITIONAL(BUILD_IN_STPL, [test x"$enable_understpl" = "xyes"])
 # sja1105 molex switch
 AM_CONDITIONAL(SJA1105_LINUX, [test "x$enable_sja1105_linux" = "xyes"])
 
+# Armada platform build
+# Supported platforms: EKF AC370/AL900
+AM_CONDITIONAL(EKF_ARMADA, [test x"$enable_ekf_armada" = "xyes"])
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
 AC_C_INLINE
 AC_TYPE_UINT8_T
 
 # Checks for library functions.
-AC_FUNC_MALLOC
-AC_FUNC_REALLOC
-AC_CHECK_FUNCS([memmove memset strtol])
+AC_CHECK_FUNC([malloc], [], [AC_MSG_ERROR([malloc() function not found.])])
+AC_CHECK_FUNC([realloc], [], [AC_MSG_ERROR([realloc() function not found.])])
+AC_CHECK_FUNC([memmove], [], [AC_MSG_ERROR([memmove() function not found.])])
+AC_CHECK_FUNC([memset], [], [AC_MSG_ERROR([memset() function not found.])])
+AC_CHECK_FUNC([strtol], [], [AC_MSG_ERROR([strtol() function not found.])])
 
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_FILES([Makefile])

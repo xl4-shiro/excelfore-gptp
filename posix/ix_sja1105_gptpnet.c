@@ -138,8 +138,6 @@ static void ret_recmsg_queue(recmsg_queue_t *rdata)
 	rdata->used=false;
 }
 
-#include "ix_gptpnet_common.c"
-
 /* get_ndevIndex, get_swid_sportid need to be changed by cascade connection topology */
 static int get_ndevIndex(int swid, int sportid)
 {
@@ -907,6 +905,11 @@ int gptpnet_ipc_respond(gptpnet_data_t *gpnet, struct sockaddr *addr,
 	return cb_ipcsocket_server_write(gpnet->ipcsd, (uint8_t*)ipcdata, size, addr);
 }
 
+int gptpnet_ipc_client_remove(gptpnet_data_t *gpnet, struct sockaddr *addr)
+{
+        return cb_ipcsocket_remove_client(gpnet->ipcsd, addr);
+}
+
 gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, cb_ipcsocket_server_rdcb ipc_cb,
 			     void *cb_data, char *netdev[], int *num_ports, char *master_ptpdev)
 {
@@ -1034,7 +1037,7 @@ int gptpnet_send(gptpnet_data_t *gpnet, int ndevIndex, uint16_t length)
 	if(swid!=0) setMgmtL2AdLup(gpnet->spifd[0], DEFAULT_SJA1105_CASCADE_PORT);
 	RdReg32(gpnet->spifd[swid], 0xC0 + (4 * sportid)); // clear the flag:UPDATE_n
 	res=write(gpnet->portfd, &swport->sbuf, length+sizeof(CB_ETHHDR_T));
-	if(res!=length+sizeof(CB_ETHHDR_T)){
+	if(res!=(int)(length+sizeof(CB_ETHHDR_T))){
 		UB_LOG(UBL_ERROR, "%s:pindex=%d, can't send, res=%d < %lu\n",
 		       __func__, ndevIndex+1, res, length+sizeof(CB_ETHHDR_T));
 		return -1;

@@ -23,7 +23,6 @@
 #include <stdio.h>
 #include <errno.h>
 #include "gptpbasetypes.h"
-#include "gptp_defaults.h"
 #include "ll_gptpsupport.h"
 #include "gptpipc.h"
 
@@ -86,7 +85,7 @@ static void print_ipc_data(gptpipc_gptpd_data_t *rd)
 		else if(rd->u.ndportd.nlstatus.duplex==2)
 			duplex="half";
 
-		printf("%s speed=%d duplex=%s portid=%s\n", rd->u.ndportd.nlstatus.devname,
+		printf("%s speed=%u duplex=%s portid=%s\n", rd->u.ndportd.nlstatus.devname,
 		       rd->u.ndportd.nlstatus.speed, duplex,
 		       ub_bsid2ssid(rd->u.ndportd.nlstatus.portid, astr));
 		break;
@@ -100,9 +99,9 @@ static void print_ipc_data(gptpipc_gptpd_data_t *rd)
 			printf("GM_UNSYNC\n");
 		memcpy(&lastGmFreqChange, &rd->u.clockd.lastGmFreqChangePk, sizeof(double));
 		printf("  gmTimeBaseIndicator=%u lastGmPhaseChange=%"PRIi64
-		       ", lastGmFreqChange=%.9f\n",
+		       ", lastGmFreqChange=%.9f adjfreq=%dppb\n",
 		       rd->u.clockd.gmTimeBaseIndicator, rd->u.clockd.lastGmPhaseChange_nsec,
-		       lastGmFreqChange);
+		       lastGmFreqChange, rd->u.clockd.adjppb);
 		break;
 	case GPTPIPC_GPTPD_GPORTD:
 		printf("GPTPD_GPORTD ");
@@ -124,30 +123,30 @@ static void print_ipc_data(gptpipc_gptpd_data_t *rd)
 		break;
 	case GPTPIPC_GPTPD_STATSD:
 		printf("GPTPD_STATSD --- portIndex=%d\n", rd->u.statsd.portIndex);
-		printf("pdelay_req_send=%d\n", rd->u.statsd.pdelay_req_send);
-		printf("pdelay_resp_rec=%d\n", rd->u.statsd.pdelay_resp_rec);
-		printf("pdelay_resp_rec_valid=%d\n", rd->u.statsd.pdelay_resp_rec_valid);
-		printf("pdelay_resp_fup_rec=%d\n", rd->u.statsd.pdelay_resp_fup_rec);
-		printf("pdelay_resp_fup_rec_valid=%d\n", rd->u.statsd.pdelay_resp_fup_rec_valid);
-		printf("pdelay_req_rec=%d\n", rd->u.statsd.pdelay_req_rec);
-		printf("pdelay_req_rec_valid=%d\n", rd->u.statsd.pdelay_req_rec_valid);
-		printf("pdelay_resp_send=%d\n", rd->u.statsd.pdelay_resp_send);
-		printf("pdelay_resp_fup_send=%d\n", rd->u.statsd.pdelay_resp_fup_send);
+		printf("pdelay_req_send=%u\n", rd->u.statsd.pdelay_req_send);
+		printf("pdelay_resp_rec=%u\n", rd->u.statsd.pdelay_resp_rec);
+		printf("pdelay_resp_rec_valid=%u\n", rd->u.statsd.pdelay_resp_rec_valid);
+		printf("pdelay_resp_fup_rec=%u\n", rd->u.statsd.pdelay_resp_fup_rec);
+		printf("pdelay_resp_fup_rec_valid=%u\n", rd->u.statsd.pdelay_resp_fup_rec_valid);
+		printf("pdelay_req_rec=%u\n", rd->u.statsd.pdelay_req_rec);
+		printf("pdelay_req_rec_valid=%u\n", rd->u.statsd.pdelay_req_rec_valid);
+		printf("pdelay_resp_send=%u\n", rd->u.statsd.pdelay_resp_send);
+		printf("pdelay_resp_fup_send=%u\n", rd->u.statsd.pdelay_resp_fup_send);
 		break;
 	case GPTPIPC_GPTPD_STATTD:
 		printf("GPTPD_STATTD --- domainNumber=%d portIndex=%d\n",
 		       rd->u.stattd.domainNumber, rd->u.stattd.portIndex);
-		printf("sync_send=%d\n", rd->u.stattd.sync_send);
-		printf("sync_fup_send=%d\n", rd->u.stattd.sync_fup_send);
-		printf("sync_rec=%d\n", rd->u.stattd.sync_rec);
-		printf("sync_rec_valid=%d\n", rd->u.stattd.sync_rec_valid);
-		printf("sync_fup_rec=%d\n", rd->u.stattd.sync_fup_rec);
-		printf("sync_fup_rec_valid=%d\n", rd->u.stattd.sync_fup_rec_valid);
-		printf("signal_msg_interval_send=%d\n", rd->u.stattd.signal_msg_interval_send);
-		printf("signal_gptp_capable_send=%d\n", rd->u.stattd.signal_gptp_capable_send);
-		printf("signal_rec=%d\n", rd->u.stattd.signal_rec);
-		printf("signal_msg_interval_rec=%d\n", rd->u.stattd.signal_msg_interval_rec);
-		printf("signal_gptp_capable_rec=%d\n", rd->u.stattd.signal_gptp_capable_rec);
+		printf("sync_send=%u\n", rd->u.stattd.sync_send);
+		printf("sync_fup_send=%u\n", rd->u.stattd.sync_fup_send);
+		printf("sync_rec=%u\n", rd->u.stattd.sync_rec);
+		printf("sync_rec_valid=%u\n", rd->u.stattd.sync_rec_valid);
+		printf("sync_fup_rec=%u\n", rd->u.stattd.sync_fup_rec);
+		printf("sync_fup_rec_valid=%u\n", rd->u.stattd.sync_fup_rec_valid);
+		printf("signal_msg_interval_send=%u\n", rd->u.stattd.signal_msg_interval_send);
+		printf("signal_gptp_capable_send=%u\n", rd->u.stattd.signal_gptp_capable_send);
+		printf("signal_rec=%u\n", rd->u.stattd.signal_rec);
+		printf("signal_msg_interval_rec=%u\n", rd->u.stattd.signal_msg_interval_rec);
+		printf("signal_gptp_capable_rec=%u\n", rd->u.stattd.signal_gptp_capable_rec);
 		break;
 	default:
 		printf("unknonw data\n");

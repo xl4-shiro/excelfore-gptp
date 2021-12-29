@@ -143,7 +143,7 @@ typedef struct gptpipc_client_req_data {
 	int32_t portIndex;
 	union {
 		gptpipc_client_req_abnormal_t abnd;
-	};
+	}u;
 } __attribute__((packed)) gptpipc_client_req_data_t;
 
 /**
@@ -223,6 +223,7 @@ typedef struct gptpipc_clock_data{
 	uint8_t gmsync;
 	uint8_t domainActive;
 	uint16_t gmTimeBaseIndicator;
+	int32_t adjppb;
 	uint8_t lastGmFreqChangePk[sizeof(double)];
 } __attribute__((packed)) gptpipc_clock_data_t;
 

@@ -19,6 +19,7 @@
  * <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
  */
 #include "mdeth.h"
+#include "gptp_config.h"
 #include "gptpnet.h"
 #include "gptpclock.h"
 #include <math.h>
@@ -32,7 +33,7 @@ void md_compose_head(PTPMsgHeader *head, MDPTPMsgHeader *phead)
 	phead->domainNumber = head->domainNumber;
 	phead->minorSdoId = head->minorSdoId;
 	memcpy(phead->flags, head->flags, 2);
-	phead->correctionField_nll = UB_HTONLL(head->correctionField);
+	phead->correctionField_nll = UB_HTONLL((uint64_t)head->correctionField);
 	memcpy(phead->messageTypeSpecific, head->messageTypeSpecific, 4);
 	memcpy(phead->sourcePortIdentity.clockIdentity, head->sourcePortIdentity.clockIdentity,
 	       sizeof(ClockIdentity));
@@ -52,7 +53,7 @@ void md_decompose_head(MDPTPMsgHeader *phead, PTPMsgHeader *head)
 	head->domainNumber = phead->domainNumber;
 	head->minorSdoId = phead->minorSdoId;
 	memcpy(head->flags, phead->flags, 2);
-	head->correctionField = UB_NTOHLL(phead->correctionField_nll);
+	head->correctionField = UB_NTOHLL((uint64_t)phead->correctionField_nll);
 	memcpy(head->messageTypeSpecific, phead->messageTypeSpecific, 4);
 	memcpy(head->sourcePortIdentity.clockIdentity, phead->sourcePortIdentity.clockIdentity,
 	       sizeof(ClockIdentity));
@@ -72,8 +73,17 @@ void md_header_template(PTPMsgHeader *head, PTPMsgType msgtype, uint16_t len,
 	head->messageLength=len;
 	head->domainNumber=0;
 	head->minorSdoId=0;
-	head->flags[0]=0x2;
-	head->flags[1]=0x0;
+	switch(msgtype){
+		case SYNC: /* fall-through */
+		case PDELAY_RESP:
+			/* twoStepFlag bit is TRUE for Sync,Pdelay_Resp */
+			head->flags[0]=0x2;
+			break;
+		default:
+			head->flags[0]=0x0;
+			break;
+	}
+	head->flags[1]=0x0|((gptpconf_get_intitem(CONF_TIMESCALE_PTP)&0x1)<<3);
 	head->correctionField=0;
 	memset(head->messageTypeSpecific,0,4);
 	memcpy(&head->sourcePortIdentity, portId, sizeof(PortIdentity));
@@ -129,8 +139,9 @@ void md_followup_information_tlv_compose(MDFollowUpInformationTLV *tlv,
 	tlv->organizationSubType_nb[2] = 1;
 	tlv->cumulativeScaledRateOffset_nl = htonl((int32_t)ldexp((rateRatio - 1.0), 41));
 	tlv->gmTimeBaseIndicator_ns = htons(gmTimeBaseIndicator);
+	tlv->lastGmPhaseChange.nsec_msb = htons(lastGmPhaseChange.nsec_msb);
+	tlv->lastGmPhaseChange.nsec_nll = UB_HTONLL((uint64_t)lastGmPhaseChange.nsec);
 	tlv->lastGmPhaseChange.subns_ns = htons(lastGmPhaseChange.subns);
-	tlv->lastGmPhaseChange.nsec_nll = UB_HTONLL(lastGmPhaseChange.nsec);
 	tlv->scaledLastGmFreqChange_nl = htonl((int32_t)ldexp(lastGmFreqChange, 41));
 }
 
@@ -159,6 +170,8 @@ void md_entity_glb_init(MDEntityGlobal **mdeglb, MDEntityGlobalForAllDomain *for
 			gptpconf_get_intitem(CONF_ALLOWED_FAULTS);
 		(*mdeglb)->forAllDomain->neighborPropDelayThresh.nsec =
 			gptpconf_get_intitem(CONF_NEIGHBOR_PROPDELAY_THRESH);
+		(*mdeglb)->forAllDomain->neighborPropDelayMinLimit.nsec =
+			gptpconf_get_intitem(CONF_NEIGHBOR_PROPDELAY_MINLIMIT);
 	}
 	(*mdeglb)->syncSequenceId = (uint16_t)(rand() & 0xffff);
 	(*mdeglb)->oneStepReceive = false;

@@ -51,6 +51,7 @@ struct port_sync_sync_receive_data{
 
 static void setPSSyncPSSR(port_sync_sync_receive_data_t *sm, double rateRatio, uint64_t cts64)
 {
+	uint64_t interval;
 	sm->portSyncSync.localPortNumber = sm->ppg->thisPort;
 	sm->portSyncSync.localPortIndex = sm->ppg->thisPortIndex;
 	sm->portSyncSync.local_ppg = sm->ppg;
@@ -66,6 +67,20 @@ static void setPSSyncPSSR(port_sync_sync_receive_data_t *sm, double rateRatio, u
 	sm->portSyncSync.gmTimeBaseIndicator = RCVD_MDSYNC_PTR->gmTimeBaseIndicator;
 	sm->portSyncSync.lastGmPhaseChange = RCVD_MDSYNC_PTR->lastGmPhaseChange;
 	sm->portSyncSync.lastGmFreqChange = RCVD_MDSYNC_PTR->lastGmFreqChange;
+
+	/* calculate syncNextSendTimeoutTime
+	 * upstreamTxTime may be used as an alternative, but since allows certain
+	 * level of tolerence due to nature of the network medium and software
+	 * processing, use relative to current time for simplicity.
+	 *
+	 * There is no need to align this timeoutTime to a specific timeslot since
+	 * this should be the time when we received the Sync message fro the master.
+	 *
+	 * AVNU standards allow a variance of interval +50%/-10% (e.g. for 125msec
+	 * allowed timer values are 112.5msec to 187.5msec).
+	 */
+	interval = LOG_TO_NSEC(sm->portSyncSync.logMessageInterval);
+	sm->portSyncSync.syncNextSendTimeoutTime.nsec = cts64 + interval + (interval/2);
 }
 
 static void *received_sync(port_sync_sync_receive_data_t *sm, uint64_t cts64)

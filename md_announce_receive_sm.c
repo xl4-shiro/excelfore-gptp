@@ -41,6 +41,7 @@ struct md_announce_receive_data{
 	int portIndex;
 	PTPMsgAnnounce rcvdAnnounce;
 	md_announce_receive_stat_data_t statd;
+	int cmlds_mode;
 };
 
 #define PORT_OPER sm->ppg->forAllDomain->portOper
@@ -53,6 +54,17 @@ static void *recAnnounce(md_announce_receive_data_t *sm)
 {
 	MDPTPMsgAnnounce *md_announce=(MDPTPMsgAnnounce *)RXANN;
 	md_decompose_head((MDPTPMsgHeader *)RXANN, &sm->rcvdAnnounce.header);
+	if(!sm->cmlds_mode){
+		// 802.1AS-2020 8.1 the value of majorSdoId for gPTP domain must be 0x1
+		// When device is accepting message under CMLDS domain, allow values
+		// other than 0x1
+		if(sm->rcvdAnnounce.header.majorSdoId!=0x1){
+			UB_LOG(UBL_DEBUGV, "%s:port=%d, invalid majorSdoId on gPTP domain, ignore ANNOUNCE\n",
+					__func__, sm->portIndex);
+			return NULL;
+		}
+	}
+
 	sm->rcvdAnnounce.currentUtcOffset = ntohs(md_announce->currentUtcOffset_ns);
 	sm->rcvdAnnounce.grandmasterPriority1 = md_announce->grandmasterPriority1;
 	sm->rcvdAnnounce.grandmasterClockQuality.clockClass =
@@ -77,6 +89,8 @@ static void *recAnnounce(md_announce_receive_data_t *sm)
 		memcpy(&sm->rcvdAnnounce.pathSequence, &md_announce->pathSequence,
 		       sm->rcvdAnnounce.tlvLength);
 	}
+
+	sm->statd.announce_rec_valid++;
 	return &sm->rcvdAnnounce;
 }
 
@@ -107,7 +121,6 @@ static void *recv_announce_proc(md_announce_receive_data_t *sm)
 {
 	UB_LOG(UBL_DEBUGV, "md_announce_receive:%s:domainIndex=%d, portIndex=%d\n",
 		__func__, sm->domainIndex, sm->portIndex);
-	sm->statd.announce_rec_valid++;
 	RCVDRXANN=false;
 	return recAnnounce(sm);
 }
@@ -167,6 +180,7 @@ void md_announce_receive_sm_init(md_announce_receive_data_t **sm,
 	(*sm)->ppg = ppg;
 	(*sm)->domainIndex = domainIndex;
 	(*sm)->portIndex = portIndex;
+	(*sm)->cmlds_mode = gptpconf_get_intitem(CONF_CMLDS_MODE);
 }
 
 int md_announce_receive_sm_close(md_announce_receive_data_t **sm)

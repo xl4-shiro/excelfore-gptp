@@ -21,121 +21,97 @@
 #ifndef __LL_GPTPSUPPORT_H_
 #define __LL_GPTPSUPPORT_H_
 
-#ifdef LINUX_PTPCLOCK
-#include <unistd.h>
-#define PTPDEV_CLOCKFD 3
-#define FD_TO_CLOCKID(ptpfd) ((~(clockid_t) (ptpfd) << 3) | PTPDEV_CLOCKFD)
-#define PTPDEV_CLOCK_OPEN(x,y) (strstr(x, CB_VIRTUAL_PTPDEV_PREFIX)==x)?\
-	GPTP_VIRTUAL_PTPDEV_FDBASE:open(x,y)
-static inline int _zero_return(void){return 0;}
-#define PTPDEV_CLOCK_CLOSE(x) (x==GPTP_VIRTUAL_PTPDEV_FDBASE)?_zero_return():close(x)
+#ifndef PTPFD_TYPE
 #define PTPFD_TYPE int
-#define PTPFD_VALID(ptpfd) (ptpfd>0)
+#define PTPFD_VALID(ptpfd) (ptpfd>=0)
+#define PTPFD_INVALID -1
+#define PRiFD "%d"
+#endif
 
-#elif defined(GHINTEGRITY)
-/* Green Hills INTEGRITY definitions */
-#include <unistd.h>
-#include "xl4combase/combase.h"
-#include "ghintg/gh_ptpclock.h"
-#define PTPFD_TYPE void*
-#define PTPFD_VALID(ptpfd) (ptpfd!=NULL)
-#define PTPDEV_CLOCK_OPEN(x,y) (strstr(x, CB_VIRTUAL_PTPDEV_PREFIX)==x)?\
-	(PTPFD_TYPE)GPTP_VIRTUAL_PTPDEV_FDBASE:gh_ptpclock_open(x,y)
+/*******************************************************
+ * functions supported in the platform dependent layer
+ *******************************************************/
+PTPFD_TYPE ptpdev_clock_open(char *ptpdev, int permission);
+int ptpdev_clock_close(PTPFD_TYPE fd);
+int ptpdev_clock_gettime(PTPFD_TYPE fd, int64_t *ts64);
+int ptpdev_clock_settime(PTPFD_TYPE fd, int64_t *ts64);
+int ptpdev_clock_adjtime(PTPFD_TYPE ptpfd, int adjppb);
+/*******************************************************/
+
+/*
+ * Virtual clock is a clock that has prefix name as #CB_VIRTUAL_PTPDEV_PREFIX
+ * and fd range from #GPTP_VIRTUAL_PTPDEV_FDBASE to #GPTP_VIRTUAL_PTPDEV_FDMAX.
+ */
+#ifdef PTP_VIRTUAL_CLOCK_SUPPORT
+
+#define VIRTUAL_CLOCKFD(fd) \
+	((fd>=(PTPFD_TYPE)GPTP_VIRTUAL_PTPDEV_FDBASE) && \
+	 (fd<=(PTPFD_TYPE)GPTP_VIRTUAL_PTPDEV_FDMAX))
+
+#define VIRTUAL_CLOCKNAME(name) \
+	(strstr(name, CB_VIRTUAL_PTPDEV_PREFIX)==name)
+
+/*----------------------------------------------------------*/
+/* These macros are used by application that use libgptp2 */
+
 static inline int _zero_return(void){return 0;}
-#define PTPDEV_CLOCK_CLOSE(x) (x==(PTPFD_TYPE)GPTP_VIRTUAL_PTPDEV_FDBASE)?\
-	_zero_return():gh_ptpclock_close(x)
-#endif
 
-#ifndef MAIN_RETURN
-#define MAIN_RETURN(x) return x
-#endif
+#define PTPDEV_CLOCK_OPEN(name, perm) \
+	VIRTUAL_CLOCKNAME(name)?(PTPFD_TYPE)GPTP_VIRTUAL_PTPDEV_FDBASE:ptpdev_clock_open(name,perm)
 
-#if (defined(LINUX_PTPCLOCK) && !defined(SJA1105))
-#define GPTP_CLOCK_GETTIME(x,y) {					\
-	if(x<GPTP_VIRTUAL_PTPDEV_FDBASE || x>GPTP_VIRTUAL_PTPDEV_FDMAX){ \
-		struct timespec ts;					\
-		clock_gettime(FD_TO_CLOCKID(x), &ts);			\
-		y=UB_TS2NSEC(ts);					\
-	}else{								\
-		y=gptpclock_gettime_ptpvfd(x);				\
-	}								\
-	}
-#define GPTP_CLOCK_SETTIME(x,y) {					\
-	if(x<GPTP_VIRTUAL_PTPDEV_FDBASE || x>GPTP_VIRTUAL_PTPDEV_FDMAX){ \
-		struct timespec ts;					\
-		UB_NSEC2TS(y,ts);					\
-		clock_settime(FD_TO_CLOCKID(x), &ts);			\
-	}else{								\
-		gptpclock_settime_ptpvfd(x, y);				\
-	}								\
-	}
-// virtual ptpdev clock has to use PTPCLOCK_RDONLY mode.
-#define GPTP_CLOCK_GETTIMEMS(x,y) {					\
-	if(x<GPTP_VIRTUAL_PTPDEV_FDBASE || x>GPTP_VIRTUAL_PTPDEV_FDMAX){ \
-		struct timespec ts;					\
-		clock_gettime(FD_TO_CLOCKID(x), &ts);			\
-		y=UB_TS2NSEC(ts);					\
-	}else{								\
-		y=ub_rt_gettime64();					\
-	}								\
-	}
-#elif defined(SJA1105)
-extern int gptp_clock_gettime(int fd, int64_t *ts);
-extern int gptp_clock_settime(int fd, const int64_t *ts);
-#define GPTP_CLOCK_GETTIME(x,y) gptp_clock_gettime(x,&y)
-#define GPTP_CLOCK_SETTIME(x,y) gptp_clock_settime(x,&y)
+#define PTPDEV_CLOCK_CLOSE(fd) \
+	(fd==(PTPFD_TYPE)(GPTP_VIRTUAL_PTPDEV_FDBASE))?_zero_return():ptpdev_clock_close(fd)
 
-#elif defined(GHINTEGRITY)
-/* Green Hills INTEGRITY definitions */
-#define REGULAR_PTPDEV(x) (x<(PTPFD_TYPE)GPTP_VIRTUAL_PTPDEV_FDBASE || x>(PTPFD_TYPE)GPTP_VIRTUAL_PTPDEV_FDMAX)
-#define GPTP_CLOCK_GETTIME(x,y) { \
-	if(REGULAR_PTPDEV(x)){		\
-		struct timespec ts;			\
-		gh_ptpclock_gettime(x,&ts); \
-		y=UB_TS2NSEC(ts);			\
-	}else{							\
-		y=gptpclock_gettime_ptpvfd(x);	\
-	}								\
-	}
-
-#define GPTP_CLOCK_SETTIME(x,y) { \
-	if(REGULAR_PTPDEV(x)){		\
-		struct timespec ts;		\
-		UB_NSEC2TS(y,ts);		\
-		gh_ptpclock_settime(x,&ts);					\
-	}else{											\
-		gptpclock_settime_ptpvfd(x, y);	\
-	}								\
-	}
-
-#define GPTP_CLOCK_GETTIMEMS(x,y) { \
-	if(REGULAR_PTPDEV(x)){		\
-		struct timespec ts;			\
-		gh_ptpclock_gettime(x,&ts); \
-		y=UB_TS2NSEC(ts);			\
-	}else{							\
-		y=ub_rt_gettime64();		\
-	}								\
-	}
-
-#else
-extern int gptp_clock_gettime(int fd, struct timespec *ts);
-extern int gptp_clock_settime(int fd, const struct timespec *ts);
-static inline int GPTP_CLOCK_GETTIME(int fd, int64_t *ts64)
-{
-	struct timespec ts;
-	int res;
-	res=gptp_clock_gettime(fd,&ts);
-	*ts64=UB_TS2NSEC(ts);
-	return res;
+#define PTPDEV_CLOCK_GETTIME(fd,ts64) \
+{\
+	if(!VIRTUAL_CLOCKFD(fd)){\
+		ptpdev_clock_gettime(fd, (int64_t *)&(ts64));\
+	}else{\
+		ts64=ub_rt_gettime64();\
+	}\
 }
-static inline int GPTP_CLOCK_SETTIME(int fd, int64_t ts64)
-{
-	struct timespec ts;
-	UB_NSEC2TS(ts64,ts);
-	return gptp_clock_settime(fd,&ts);
+/*----------------------------------------------------------*/
+
+/*----------------------------------------------------------*/
+/* These macros are used by gptp2d */
+uint64_t gptp_vclock_gettime(PTPFD_TYPE ptpfd);
+int gptp_vclock_settime(PTPFD_TYPE ptpfd, uint64_t ts64);
+
+#define GPTP_CLOCK_GETTIME(fd,ts64) \
+{\
+	if(!VIRTUAL_CLOCKFD(fd)){\
+		ptpdev_clock_gettime(fd, (int64_t *)&(ts64));\
+	}else{\
+		ts64=gptp_vclock_gettime(fd);\
+	}\
 }
-#endif
+
+#define GPTP_CLOCK_SETTIME(fd,ts64) \
+{\
+	if(!VIRTUAL_CLOCKFD(fd)){\
+		ptpdev_clock_settime(fd, (int64_t *)&(ts64));\
+	}else{\
+		gptp_vclock_settime(fd, ts64);\
+	}\
+}
+/*----------------------------------------------------------*/
+
+#else //PTP_VIRTUAL_CLOCK_SUPPORT
+
+/*----------------------------------------------------------*/
+/* These macros are used by application that use libgptp2 */
+#define PTPDEV_CLOCK_OPEN(name, perm) ptpdev_clock_open(name,perm)
+#define PTPDEV_CLOCK_CLOSE(fd) ptpdev_clock_close(fd)
+#define PTPDEV_CLOCK_GETTIME(fd,ts64) ptpdev_clock_gettime(fd, (int64_t *)&(ts64))
+/*----------------------------------------------------------*/
+
+/*----------------------------------------------------------*/
+/* These macros are used by gptp2d */
+#define GPTP_CLOCK_GETTIME(fd,ts64) ptpdev_clock_gettime(fd, (int64_t *)&(ts64))
+#define GPTP_CLOCK_SETTIME(fd,ts64) ptpdev_clock_settime(fd, (int64_t *)&(ts64))
+/*----------------------------------------------------------*/
+
+#endif //PTP_VIRTUAL_CLOCK_SUPPORT
 
 /**
  * @brief enables H/W Timestamping for socket

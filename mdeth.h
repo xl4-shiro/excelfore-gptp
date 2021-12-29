@@ -190,6 +190,7 @@ typedef struct MDEntityGlobalForAllDomain{
 	uint16_t allowedFaults;
 	bool isMeasuringDelay;
 	UScaledNs neighborPropDelayThresh;
+	UScaledNs neighborPropDelayMinLimit;
 	bool asCapableAcrossDomains;
 }MDEntityGlobalForAllDomain;
 typedef struct MDEntityGlobal{
@@ -241,6 +242,8 @@ typedef struct MDPdelayReqSM {
 	bool neighborRateRatioValid;
 	uint16_t detectedFaults;
 	bool portEnabled0;
+	// AVnu requirement to cease transmit on consecutive multi-responses
+	uint16_t multiResponses;
 } MDPdelayReqSM;
 
 // 11.2.18 MDPdelayResp state machine

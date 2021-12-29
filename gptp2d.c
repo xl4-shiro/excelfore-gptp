@@ -98,29 +98,6 @@ static int set_options(gptpoptd_t *gpoptd, int argc, char *argv[])
 	return res;
 }
 
-static void debug_memory_fileout()
-{
-	char *buf;
-	int size;
-	char *fname;
-	int fd;
-	if(ubb_memory_out_alldata(&buf, &size)) return;
-	fname=gptpconf_get_item(CONF_DEBUGLOG_MEMORY_FILE);
-	if(!fname || !fname[0]) goto erexit;
-	fd=open(fname, O_CREAT | O_WRONLY | O_TRUNC, 0666);
-	if(fd<0) {
-		UB_LOG(UBL_ERROR, "%s:can't open file:%s\n", __func__, fname);
-		goto erexit;
-	}
-	if(write(fd, buf, size)!=size){
-		UB_LOG(UBL_ERROR, "%s:can't write into the file\n", __func__);
-	}
-	close(fd);
-erexit:
-	free(buf);
-	return;
-}
-
 #ifndef GPTP2_IN_LIBRARY
 #define GPTP2D_MAIN main
 #endif
@@ -144,7 +121,7 @@ int GPTP2D_MAIN(int argc, char *argv[])
 	oumask=umask(011);
 	memset(&gpdpd, 0, sizeof(gpdpd));
 	memset(&gpoptd, 0, sizeof(gpoptd));
-	if(set_options(&gpoptd, argc, argv)<0) MAIN_RETURN(-1);
+	if(set_options(&gpoptd, argc, argv)<0) return -1;
 	if(gpoptd.conf_file) ub_read_config_file(gpoptd.conf_file, gptpconf_set_stritem);
 	ubb_memory_out_init(NULL, gptpconf_get_intitem(CONF_DEBUGLOG_MEMORY_SIZE)*1024);
 	UB_LOG(UBL_INFO, "gptp2d: gptp2-"XL4PKGVERSION"\n");
@@ -186,7 +163,9 @@ int GPTP2D_MAIN(int argc, char *argv[])
 	free(gpdpd.netdevs);
 	free(ptpdevs);
 	free(netdevs);
-	debug_memory_fileout();
+	if(ubb_memory_file_out(gptpconf_get_item(CONF_DEBUGLOG_MEMORY_FILE))){
+		UB_LOG(UBL_ERROR, "%s:can't write the memory log into a file\n", __func__);
+	}
 	umask(oumask);
 	ubb_memory_out_close();
 	unibase_close();

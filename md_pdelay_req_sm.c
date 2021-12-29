@@ -56,6 +56,8 @@ struct md_pdelay_req_data{
 	int cmlds_mode;
 	md_pdelay_req_stat_data_t statd;
 	uint64_t mock_txts64;
+	uint64_t prev_t1ts64;
+	uint64_t prev_t2ts64;
 };
 
 #define RCVD_PDELAY_RESP sm->thisSM->rcvdPdelayResp
@@ -86,17 +88,39 @@ static int txPdelayReq(gptpnet_data_t *gpnetd, int portIndex)
 	return gptpnet_send_whook(gpnetd, portIndex-1, ssize);
 }
 
-static double computePdelayRateRatio(md_pdelay_req_data_t *sm)
+static double computePdelayRateRatio(md_pdelay_req_data_t *sm, double oldRateRatio)
 {
-	return 1.0;
+	uint64_t dt1, dt2;
+	uint64_t maxd, mind;
+	double pDelayRateRatio = 1.0;
+
+	dt1=sm->t1ts64-sm->prev_t1ts64;
+	dt2=sm->t2ts64-sm->prev_t2ts64;
+	// check in +/- 50% of the interval time
+	mind=sm->mdeg->forAllDomain->pdelayReqInterval.nsec / 2;
+	maxd=sm->mdeg->forAllDomain->pdelayReqInterval.nsec + mind;
+	if(dt1 > mind && dt1 < maxd && dt2 > mind && dt2 < maxd){
+		// compute following sample computation in 802.1AS-2020 12.5.2.4.4
+		pDelayRateRatio = (double)(sm->t1ts64-sm->prev_t1ts64)/(sm->t2ts64-sm->prev_t2ts64);
+		// neighborRateValid should be set to TRUE only after 2 valid responses
+		if(!sm->thisSM->neighborRateRatioValid){
+			sm->thisSM->neighborRateRatioValid=true;
+		}
+	}
+	UB_LOG(UBL_DEBUG, "%s: old pDelayRateRatio %.17g -> %.17g : ave=%.17g  min=%"PRIu64" max=%"PRIu64" dt1=%"PRIu64" dt2=%"PRIu64"\n",
+			__func__, oldRateRatio, pDelayRateRatio,
+			(double)(oldRateRatio+pDelayRateRatio)/2, mind, maxd, dt1, dt2);
+	sm->prev_t1ts64 = sm->t1ts64;
+	sm->prev_t2ts64 = sm->t2ts64;
+	// do rolling average
+	return (double)(oldRateRatio+pDelayRateRatio)/2;
 }
 
 #define COMPUTED_PROP_TIME_TOO_BIG (UB_SEC_NS/100)
 static uint64_t computePropTime(md_pdelay_req_data_t *sm)
 {
 	int64_t rts;
-	rts = (int64_t)((sm->t4ts64 - sm->t1ts64) - (sm->t3ts64 - sm->t2ts64))/2;
-	sm->thisSM->neighborRateRatioValid=true;
+	rts = (((sm->ppg->forAllDomain->neighborRateRatio)*(int64_t)((sm->t4ts64 - sm->t1ts64)) - (sm->t3ts64 - sm->t2ts64)))/2;
 	if(rts<0 || rts>COMPUTED_PROP_TIME_TOO_BIG){
 		UB_LOG(UBL_WARN, "%s: computed PropTime is out of range = %"PRIi64", set 0\n",
 		       __func__, rts);
@@ -145,6 +169,8 @@ static int initial_send_pdelay_req_proc(md_pdelay_req_data_t *sm, uint64_t cts64
 	RCVD_PDELAY_RESP = false;
 	RCVD_PDELAY_RESP_FOLLOWUP = false;
 	sm->ppg->forAllDomain->neighborRateRatio = 1.0;
+	sm->prev_t1ts64 = 0;
+	sm->prev_t2ts64 = 0;
 	sm->thisSM->rcvdMDTimestampReceive = false;
 	sm->thisSM->pdelayReqSequenceId = (uint16_t)(rand() & 0xffff);
 	sm->thisSM->txPdelayReqPtr = setPdelayReq(sm);
@@ -156,6 +182,7 @@ static int initial_send_pdelay_req_proc(md_pdelay_req_data_t *sm, uint64_t cts64
 	sm->thisSM->pdelayIntervalTimer.subns = 0;
 	sm->thisSM->pdelayIntervalTimer.nsec = cts64;
 	sm->thisSM->lostResponses = 0;
+	sm->thisSM->multiResponses = 0;
 	sm->thisSM->detectedFaults = 0;
 	sm->mdeg->forAllDomain->isMeasuringDelay = false;
 	sm->mdeg->forAllDomain->asCapableAcrossDomains = false;
@@ -187,20 +214,69 @@ static void *reset_proc(md_pdelay_req_data_t *sm)
 	UB_LOG(UBL_DEBUGV, "md_pdelay_req:%s:portIndex=%d\n", __func__, sm->portIndex);
 	sm->thisSM->initPdelayRespReceived = false;
 	RCVD_PDELAY_RESP = false;
-	if (sm->thisSM->lostResponses <= sm->mdeg->forAllDomain->allowedLostResponses){
+	/* 802.1AS-2020 Figure 11-9 MPDelayReq state machine
+	 * MPDelayReqSM must keep count of consecutive lost responses to Pdelay_Req
+	 * and compares it to allowedLostResponses.
+	 * The figure uses the condition "lostResponses <= allowedLostResponses"
+	 * and since RESET state is triggered only after pdelayIntervalTimer has
+	 * elapsed, thus this will allow effectively 2 + allowedLostResponses.
+	 *
+	 * An interpretation of this is that asCapable must be set to false after
+	 * consective lost of allowedLostResponses. Thus it is more proper in such
+	 * case to use "<" rather than "<=".
+	 * This interpretation follows the expectation of AVNU gptp test plan.
+	 *
+	 * Thus instead of:
+	 *   if (sm->thisSM->lostResponses <= sm->mdeg->forAllDomain->allowedLostResponses)
+	 * we will use the following:
+	 */
+	if (sm->thisSM->lostResponses < sm->mdeg->forAllDomain->allowedLostResponses){
 		sm->thisSM->lostResponses += 1;
 	}else{
 		sm->mdeg->forAllDomain->isMeasuringDelay = false;
 		if(!sm->mdeg->forAllDomain->asCapableAcrossDomains) return NULL;
 		sm->mdeg->forAllDomain->asCapableAcrossDomains = false;
+		sm->thisSM->neighborRateRatioValid=false;
 		UB_LOG(UBL_INFO, "%s:reset asCapableAcrossDomains, portIndex=%d\n",
 		       __func__, sm->portIndex);
 	}
+
+	/* AVnu specific behavior
+	 * AVnu alliance requres in addition to the required behavior on RESET that
+	 * the device cease to transmit PDelayReq messages after consecutive
+	 * PDelay_Req exchanges which have been responded to with multiple responses.
+	 * See AVnuSpecific: gPTP.com.c.18.1 */
+	if((sm->ptasg->conformToAvnu)&&(sm->thisSM->multiResponses)){
+		if (sm->thisSM->multiResponses >= sm->mdeg->forAllDomain->allowedLostResponses){
+			UB_LOG(UBL_WARN, "%s:portIndex=%d ceasing transmits for 5 minutes...\n",
+					__func__, sm->portIndex);
+			sm->mdeg->forAllDomain->isMeasuringDelay = false;
+			sm->mdeg->forAllDomain->asCapableAcrossDomains = false;
+			sm->thisSM->neighborRateRatioValid=false;
+		}
+	}
+
 	return NULL;
 }
 
+#define CEASETIME_AVNU_MULTIRESPOSE 5*60*UB_SEC_NS // 5 minutes cease time
 static md_pdelay_req_state_t reset_condition(md_pdelay_req_data_t *sm, uint64_t cts64)
 {
+	/* AVnu specific behavior
+	 * AVnu alliance requres in addition to the required behavior on RESET that
+	 * the device cease to transmit PDelayReq messages for 5 minutes after
+	 * consecutive PDelay_Req exchanges which have been responded to with
+	 * multiple responses. See AVnuSpecific: gPTP.com.c.18.1 */
+	if(sm->ptasg->conformToAvnu){
+		if(sm->thisSM->multiResponses>=sm->mdeg->forAllDomain->allowedLostResponses){
+			if(cts64 - sm->thisSM->pdelayIntervalTimer.nsec < CEASETIME_AVNU_MULTIRESPOSE){
+				return RESET;
+			}else{
+				// clear so as not to cease indefinitely
+				sm->thisSM->multiResponses=0;
+			}
+		}
+	}
 	if((cts64 - sm->thisSM->pdelayIntervalTimer.nsec >=
 	    sm->mdeg->forAllDomain->pdelayReqInterval.nsec)){
 		return SEND_PDELAY_REQ;
@@ -279,6 +355,21 @@ static md_pdelay_req_state_t waiting_for_pdelay_resp_condition(md_pdelay_req_dat
 		return WAITING_FOR_PDELAY_RESP;
 	}
 
+	/* 802.1AS-2020 11.2.2 Determination of asCapable
+	 * Responses which are deeemed from itself or another port of the same
+	 * instance should be ignored.
+	 */
+	if(!memcmp(RCVD_PDELAY_RESP_PTR->head.sourcePortIdentity.clockIdentity,
+		sm->ptasg->thisClock, sizeof(ClockIdentity))) {
+		UB_TLOG(UBL_WARN, "%s:RESP is from self thisClock="UB_PRIhexB8
+			 ", received="UB_PRIhexB8"\n",
+			 __func__,
+			 UB_ARRAY_B8(sm->ptasg->thisClock),
+			 UB_ARRAY_B8(RCVD_PDELAY_RESP_PTR->
+				    requestingPortIdentity.clockIdentity));
+		return RESET;
+	}
+
 	if(memcmp(RCVD_PDELAY_RESP_PTR->requestingPortIdentity.clockIdentity,
 		  sm->ptasg->thisClock, sizeof(ClockIdentity))) {
 		UB_TLOG(UBL_WARN, "%s:ClockId doesn't match, expected="UB_PRIhexB8
@@ -292,6 +383,17 @@ static md_pdelay_req_state_t waiting_for_pdelay_resp_condition(md_pdelay_req_dat
 
 	if(ntohs(RCVD_PDELAY_RESP_PTR->requestingPortIdentity.portNumber_ns) !=
 	   sm->ppg->thisPort) return RESET;
+
+	if(!sm->cmlds_mode){
+		// 802.1AS-2020 8.1 the value of majorSdoId for gPTP domain must be 0x1
+		// When device is accepting message under CMLDS domain, allow values
+		// other than 0x1
+		if((RCVD_PDELAY_RESP_PTR->head.majorSdoId_messageType & 0xF0)!=0x10){
+			UB_LOG(UBL_DEBUGV, "%s: recevied RESP (seqId=%d) with invalid majorSdoId, ignore\n",
+					__func__, ntohs(RCVD_PDELAY_RESP_PTR->head.sequenceId_ns));
+			return WAITING_FOR_PDELAY_RESP;
+		}
+	}
 
 	if(RCVD_PDELAY_RESP_PTR->head.sequenceId_ns !=
 	   sm->thisSM->txPdelayReqPtr->head.sequenceId_ns) {
@@ -338,10 +440,38 @@ static md_pdelay_req_state_t waiting_for_pdelay_resp_follow_up_condition(
 			 "twice for the same PdelayReq, sequenceId=%d\n",
 			 __func__, sm->portIndex,
 			 ntohs(RCVD_PDELAY_RESP_PTR->head.sequenceId_ns));
+		sm->thisSM->multiResponses++;
 		return RESET;
 	}
 
 	if(!RCVD_PDELAY_RESP_FOLLOWUP) return WAITING_FOR_PDELAY_RESP_FOLLOW_UP;
+
+	if(!sm->cmlds_mode){
+		// 802.1AS-2020 8.1 the value of majorSdoId for gPTP domain must be 0x1
+		// When device is accepting message under CMLDS domain, allow values
+		// other than 0x1
+		if((RCVD_PDELAY_RESP_FOLLOWUP_PTR->head.majorSdoId_messageType & 0xF0)!=0x10){
+
+			UB_LOG(UBL_DEBUGV, "%s: received PDFup (seqId=%d) with invalid majorSdoId, ignore\n",
+					__func__, RCVD_PDELAY_RESP_FOLLOWUP_PTR->head.sequenceId_ns);
+			return WAITING_FOR_PDELAY_RESP_FOLLOW_UP;
+		}
+	}
+
+	/* 802.1AS-2020 11.2.2 Determination of asCapable
+	 * Responses which are deeemed from itself or another port of the same
+	 * instance should be ignored.
+	 */
+	if(!memcmp(RCVD_PDELAY_RESP_FOLLOWUP_PTR->head.sourcePortIdentity.clockIdentity,
+		sm->ptasg->thisClock, sizeof(ClockIdentity))) {
+		UB_TLOG(UBL_WARN, "%s:FUP is from self thisClock="UB_PRIhexB8
+			 ", received="UB_PRIhexB8"\n",
+			 __func__,
+			 UB_ARRAY_B8(sm->ptasg->thisClock),
+			 UB_ARRAY_B8(RCVD_PDELAY_RESP_FOLLOWUP_PTR->
+				    requestingPortIdentity.clockIdentity));
+		return RESET;
+	}
 
 	if(RCVD_PDELAY_RESP_FOLLOWUP_PTR->head.sequenceId_ns !=
 	   sm->thisSM->txPdelayReqPtr->head.sequenceId_ns) {
@@ -385,13 +515,33 @@ static void *waiting_for_pdelay_interval_timer_proc(md_pdelay_req_data_t *sm)
 	UB_LOG(UBL_DEBUGV, "md_pdelay_req:%s:portIndex=%d\n", __func__, sm->portIndex);
 	RCVD_PDELAY_RESP_FOLLOWUP = false;
 	sm->thisSM->lostResponses = 0;
+	sm->thisSM->multiResponses = 0;
 	if(sm->ppg->forAllDomain->asymmetryMeasurementMode) return NULL;
-	if(sm->ppg->forAllDomain->computeNeighborRateRatio)
-		sm->ppg->forAllDomain->neighborRateRatio = computePdelayRateRatio(sm);
+	if(sm->ppg->forAllDomain->computeNeighborRateRatio){
+		sm->ppg->forAllDomain->neighborRateRatio = computePdelayRateRatio(sm,
+				sm->ppg->forAllDomain->neighborRateRatio);
+	} else {
+		// neighborRateRatio is deemed valid when computeNeighborRateRatio is false
+		sm->thisSM->neighborRateRatioValid=true;
+	}
 	if(sm->ppg->forAllDomain->computeNeighborPropDelay)
 		sm->ppg->forAllDomain->neighborPropDelay.nsec = computePropTime(sm);
 
 	sm->mdeg->forAllDomain->isMeasuringDelay = true;
+
+	// In addition to the conditions in 802.1AS-2020 Figure 11-9
+	// WAITING_FOR_PDELAY_INTERVAL_TIMER, consider neighborPropDelay less then
+	// CONF_NEIGHBOR_PROPDELAY_MINLIMIT as fault
+	if((sm->ppg->forAllDomain->neighborPropDelay.nsec <
+		sm->mdeg->forAllDomain->neighborPropDelayMinLimit.nsec) &&
+	   (memcmp(RCVD_PDELAY_RESP_PTR->head.sourcePortIdentity.clockIdentity,
+		   sm->ptasg->thisClock, sizeof(ClockIdentity))
+		   ) && sm->thisSM->neighborRateRatioValid) {
+		UB_LOG(UBL_WARN, "%s:portIndex=%d, neighborPropDelay is below the min limit (%"PRIu64" < %"PRIu64")\n",
+				__func__, sm->portIndex, sm->ppg->forAllDomain->neighborPropDelay.nsec,
+				sm->mdeg->forAllDomain->neighborPropDelayMinLimit.nsec);
+		goto detectedfault;
+	}
 
 	if((sm->ppg->forAllDomain->neighborPropDelay.nsec <=
 	    sm->mdeg->forAllDomain->neighborPropDelayThresh.nsec) &&
@@ -418,8 +568,12 @@ static void *waiting_for_pdelay_interval_timer_proc(md_pdelay_req_data_t *sm)
 		goto noascapable;
 	}
 
+detectedfault:
 	if(sm->thisSM->detectedFaults <= sm->mdeg->forAllDomain->allowedFaults){
 		sm->thisSM->detectedFaults += 1;
+		UB_LOG(UBL_WARN, "%s:portIndex=%d detected fault=%d/%d\n", __func__,
+				sm->portIndex, sm->thisSM->detectedFaults,
+				sm->mdeg->forAllDomain->allowedFaults);
 		return NULL;
 	}
 noascapable:

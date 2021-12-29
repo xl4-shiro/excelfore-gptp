@@ -22,7 +22,6 @@
 #define __GPTPCLOCK_H_
 #include <stdlib.h>
 #include "gptpbasetypes.h"
-#include "gptp_defaults.h"
 #include "ll_gptpsupport.h"
 #include "gptpipc.h"
 
@@ -99,15 +98,12 @@ int gptpclock_tsconv(int64_t *ts64, int clockIndex, uint8_t domainNumber,
 uint8_t *gptpclock_clockid(int clockIndex, uint8_t domainNumber);
 int gptpclock_rate_same(int clockIndex, uint8_t domainNumber,
 			int clockIndex1, uint8_t domainNumber1);
-int gptpclock_get_clock_params(int clockIndex, uint8_t domainNumber,
-			       uint16_t *gmTimeBaseIndicator,
-			       ScaledNs *lastGmPhaseChange,
-			       double *lastGmFreqChange);
 int gptpclock_setoffset64(int64_t ts64, int clockIndex, uint8_t domainNumber);
 int gptpclock_active_domain_switch(int domainIndex);
 int gptpclock_active_domain_status(void);
 int gptpclock_set_gmsync(int clockIndex, uint8_t domainNumber, bool becomeGM);
 int gptpclock_get_gmsync(int clockIndex, uint8_t domainNumber);
+bool gptpclock_we_are_gm(int domainIndex);
 int gptpclock_reset_gmsync(int clockIndex, uint8_t domainNumber);
 int gptpclock_set_gmchange(int domainNumber, ClockIdentity clockIdentity);
 int gptpclock_get_gmchange_ind(int domainNumber);
@@ -145,8 +141,6 @@ int gptpclock_set_thisClock(int clockIndex, uint8_t domainNumber, bool set_clock
 ptpclock_state_t gptp_get_ptpfd(char *ptpdev, PTPFD_TYPE *ptpfd);
 int gptp_close_ptpfd(PTPFD_TYPE ptpfd);
 int gptp_clock_adjtime(PTPFD_TYPE ptpfd, int adjppb);
-uint64_t gptpclock_gettime_ptpvfd(PTPFD_TYPE ptpfd);
-int gptpclock_settime_ptpvfd(PTPFD_TYPE ptpfd, uint64_t ts64);
 
 /**
  * @brief settimeofday by "year:mon:day:hour:min:sec"
@@ -154,5 +148,7 @@ int gptpclock_settime_ptpvfd(PTPFD_TYPE ptpfd, uint64_t ts64);
  * @param tstr	timeofday string in "year:mon:day:hour:min:sec" string format
  */
 int gptpclock_settime_str(char *tstr, int clockIndex, uint8_t domainNumber);
+
+int gptpclock_get_adjppb(int clockIndex, int domainNumber);
 
 #endif

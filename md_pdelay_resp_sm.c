@@ -306,6 +306,33 @@ int md_pdelay_resp_sm_recv_req(md_pdelay_resp_data_t *sm, event_data_recv_t *edr
 	sm->statd.pdelay_req_rec++;
 	memcpy(&sm->rcvdPdelayReq, edrecv->recbptr, sizeof(MDPTPMsgPdelayReq));
 	sm->thisSM->rcvdPdelayReqPtr = &sm->rcvdPdelayReq;
+
+	if(!sm->cmlds_mode){
+		// 802.1AS-2020 8.1 the value of majorSdoId for gPTP domain must be 0x1
+		// When device is accepting message under CMLDS domain, allow values
+		// other than 0x1
+		if((sm->thisSM->rcvdPdelayReqPtr->head.majorSdoId_messageType & 0xF0)!=0x10){
+			UB_LOG(UBL_DEBUGV, "%s:port=%d, invalid majorSdoId on gPTP domain, ignore event.\n",
+					__func__, sm->portIndex);
+			return 0;
+		}
+	}else{
+		if((sm->thisSM->rcvdPdelayReqPtr->head.majorSdoId_messageType & 0xF0)==0x20){
+			if(sm->ppg->forAllDomain->receivedNonCMLDSPdelayReq!=-1){
+				UB_LOG(UBL_INFO, "%s:port=%d, set receivedNonCMLDSPdelayReq=-1\n",
+						__func__, sm->portIndex);
+				sm->ppg->forAllDomain->receivedNonCMLDSPdelayReq=-1;
+			}
+		}
+	}
+	if((sm->thisSM->rcvdPdelayReqPtr->head.majorSdoId_messageType & 0xF0)==0x10){
+		if(sm->ppg->forAllDomain->receivedNonCMLDSPdelayReq!=1){
+			UB_LOG(UBL_INFO, "%s:port=%d, set receivedNonCMLDSPdelayReq=1\n",
+					__func__, sm->portIndex);
+			sm->ppg->forAllDomain->receivedNonCMLDSPdelayReq=1;
+		}
+	}
+
 	recsqid=ntohs(sm->thisSM->rcvdPdelayReqPtr->head.sequenceId_ns);
 	if(sm->last_seqid >= 0){
 		uint16_t expsqid;
@@ -321,20 +348,7 @@ int md_pdelay_resp_sm_recv_req(md_pdelay_resp_data_t *sm, event_data_recv_t *edr
 	sm->last_seqid=recsqid;
 	sm->thisSM->rcvdPdelayReq = true;
 	sm->ts2=edrecv->ts64;
-	if((sm->thisSM->rcvdPdelayReqPtr->head.majorSdoId_messageType & 0xF0)==0x20){
-		if(sm->ppg->forAllDomain->receivedNonCMLDSPdelayReq!=-1){
-			UB_LOG(UBL_INFO, "%s:port=%d, set receivedNonCMLDSPdelayReq=-1\n",
-			       __func__, sm->portIndex);
-			sm->ppg->forAllDomain->receivedNonCMLDSPdelayReq=-1;
-		}
-	}
-	if((sm->thisSM->rcvdPdelayReqPtr->head.majorSdoId_messageType & 0xF0)==0x10){
-		if(sm->ppg->forAllDomain->receivedNonCMLDSPdelayReq!=1){
-			UB_LOG(UBL_INFO, "%s:port=%d, set receivedNonCMLDSPdelayReq=1\n",
-			       __func__, sm->portIndex);
-			sm->ppg->forAllDomain->receivedNonCMLDSPdelayReq=1;
-		}
-	}
+
 	return md_pdelay_resp_sm(sm, cts64);
 }
 

@@ -21,7 +21,6 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <limits.h>
-#include "gptp_defaults.h"
 #include "gptpclock.h"
 #include "gptpcommon.h"
 
@@ -172,7 +171,6 @@ separately, and the combined value must be copied into the shared memory.
   it is controled by GM status of each domain, and CONF_ACTIVE_DOMAIN_AUTO_SWITCH
  */
 
-#define MAX_CONSEC_TS_DIFF 500000 //500usec
 #define LASTGM_OFFSET64_INVALID LLONG_MAX
 #define LASTGM_ADJVPPB_INVALID INT_MAX
 
@@ -195,22 +193,19 @@ typedef struct oneclock_data {
 	int64_t last_setts64; // this is not the same as pp->last_setts64
 	double adjrate; // this is not the same as pp->adjrate
 	int adjvppb;
-	uint16_t timeBaseIndicator;
-	ScaledNs lastGmPhaseChange;
 	int ts2diff;
 	uint32_t flags;
-	double lastGmFreqChange;
-	int lastgm_adjvppb;
-	int64_t lastgm_offset64;
 } oneclock_data_t;
 
 typedef struct per_domain_data {
 	struct timespec last_gmch_ts;
 	bool waiting_d0_sync;
 	bool gm_stable;
+	bool we_are_gm;
 	uint8_t domainNumber; // put this, to get domainNumber from domainIndex
 	ClockIdentity gmClockId;
 	int thisClockIndex;
+	int thisClock_adjppb;
 } per_domain_data_t;
 
 struct gptpclock_data {
@@ -224,10 +219,10 @@ struct gptpclock_data {
 
 static gptpclock_data_t gcd;
 
-#define GPTPCLOCK_FN_ENTRY(od,clockIndex,domainNumber)  {	\
-	if(!gcd.clds) return -1; \
-	if((od=get_clockod(clockIndex, domainNumber))==NULL) return -1; \
-	if(!PTPFD_VALID(od->ptpfd)) return -1; \
+#define GPTPCLOCK_FN_ENTRY(od,clockIndex,domainNumber)	{			\
+		if(!gcd.clds) return -1;					\
+		if((od=get_clockod(clockIndex, domainNumber))==NULL) return -1; \
+		if(!PTPFD_VALID(od->ptpfd)) return -1;				\
 	}
 
 static oneclock_data_t *get_clockod(int clockIndex, uint8_t domainNumber)
@@ -335,8 +330,8 @@ static int avarage_time_setoffset(int clockIndex, uint8_t domainNumber)
 	int i;
 	for(i=0;i<10;i++){
 		v = time_setoffset64(0, clockIndex, domainNumber);
-		if(v > MAX_CONSEC_TS_DIFF) continue;
-		if(abs(vmax)<abs(v)) vmax=v;
+		if(v > gptpconf_get_intitem(CONF_MAX_CONSEC_TS_DIFF)) continue;
+		if(labs(vmax)<labs(v)) vmax=v;
 		av += v;
 		count ++;
 	}
@@ -397,7 +392,7 @@ int gptpclock_add_clock(int clockIndex, char *ptpdev, int domainIndex,
 	}else{
 		UB_LOG(UBL_ERROR, "%s:clockIndex=%d, ptpdev=%s is not accessible\n",
 		       __func__, clockIndex, ptpdev);
-		od->ptpfd=0;
+		od->ptpfd=PTPFD_INVALID;
 		gptpclock_del_clock(clockIndex, domainNumber);
 		return -1;
 	}
@@ -415,7 +410,7 @@ int gptpclock_del_clock(int clockIndex, uint8_t domainNumber)
 	oneclock_data_t *od;
 	if(!gcd.clds) return 0;
 	if((od=get_clockod(clockIndex, domainNumber))){
-		if(od->ptpfd) gptp_close_ptpfd(od->ptpfd);
+		if(PTPFD_VALID(od->ptpfd)) gptp_close_ptpfd(od->ptpfd);
 		ub_esarray_del_pointer(gcd.clds, (ub_esarray_element_t *)od);
 		UB_LOG(UBL_DEBUG, "%s:clockIndex=%d, domainNumber=%d\n",
 		       __func__, clockIndex, domainNumber);
@@ -428,7 +423,7 @@ int gptpclock_del_clock(int clockIndex, uint8_t domainNumber)
 
 int gptpclock_init(int max_domains, int max_ports)
 {
-        int max_clocks = max_domains * max_ports;
+	int max_clocks = max_domains * max_ports;
 	CB_THREAD_MUTEXATTR_T mattr;
 	char *shmem_name;
 	memset(&gcd, 0, sizeof(gptpclock_data_t));
@@ -437,8 +432,8 @@ int gptpclock_init(int max_domains, int max_ports)
 	memset(gcd.pdd, 0, max_domains*sizeof(per_domain_data_t));
 	gcd.active_domain_switch=-1; //default is automatic switch to a stable domain
 
-        // clock data has pointer element, thus disallow realloc of container
-        // set max elements and expansion units with the same values
+	// clock data has pointer element, thus disallow realloc of container
+	// set max elements and expansion units with the same values
 	gcd.clds = ub_esarray_init(max_clocks, sizeof(oneclock_data_t), max_clocks);
 	gcd.shmsize = sizeof(gptp_clock_ppara_t)*max_domains +
 		sizeof(gptp_master_clock_shm_head_t);
@@ -527,13 +522,6 @@ int gptpclock_setoffset64(int64_t ts64, int clockIndex, uint8_t domainNumber)
 	if(od->mode != PTPCLOCK_SLAVE_MAIN){
 		if(!clockIndex) gptpclock_mutex_trylock(&gcd.shm->head.mcmutex);
 		od->offset64=ts64;
-		if(od->lastgm_offset64!=LASTGM_OFFSET64_INVALID){
-			od->flags |= GPTPIPC_EVENT_CLOCK_FLAG_PHASE_UPDATE;
-			od->lastGmPhaseChange.nsec = od->offset64 - od->lastgm_offset64;
-			od->lastgm_offset64 = LASTGM_OFFSET64_INVALID;
-			UB_LOG(UBL_INFO, "%s:lastGmPhaseChange=%"PRIi64"\n",
-			       __func__, od->lastGmPhaseChange.nsec);
-		}
 		gptpclock_setoffset_od(od);
 		if(!clockIndex) CB_THREAD_MUTEX_UNLOCK(&gcd.shm->head.mcmutex);
 		GH_SET_GPTP_SHM;
@@ -557,6 +545,8 @@ int gptpclock_setadj(int adjvppb, int clockIndex, uint8_t domainNumber)
 	uint32_t save_flags;
 	int64_t ts;
 	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
+	if(gcd.pdd[od->domainIndex].thisClockIndex==clockIndex)
+		gcd.pdd[od->domainIndex].thisClock_adjppb=adjvppb;
 	switch(od->mode){
 	case PTPCLOCK_SLAVE_MAIN:
 		if(gptp_clock_adjtime(od->ptpfd, adjvppb)<0){
@@ -601,7 +591,7 @@ void gptpclock_print_clkpara(ub_dbgmsg_level_t level)
 	for(i=0;i<gcd.shm->head.max_domains;i++){
 		pp=&gcd.shm->gcpp[i];
 		if((odt=get_clockod(gcd.pdd[i].thisClockIndex, i))==NULL){
-			UB_LOG(UBL_WARN, "domain=%d thisClockIndex=%d doesn't exits\n",
+			UB_LOG(UBL_WARN, "domain=%d thisClockIndex=%d doesn't exists\n",
 			       i,gcd.pdd[i].thisClockIndex);
 			return;
 		}
@@ -669,31 +659,31 @@ int gptpclock_mode_slave_sub(int clockIndex, uint8_t domainNumber)
 }
 
 static int diff_in_two_clocks(int64_t *tss64,
-                              int clockIndex, uint8_t domainNumber,
+			      int clockIndex, uint8_t domainNumber,
 			      int clockIndex1, uint8_t domainNumber1)
 {
-        oneclock_data_t *od, *od1;
+	oneclock_data_t *od, *od1;
 	int64_t ts1, ts2, ts3;
 
-        GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
-        GPTPCLOCK_FN_ENTRY(od1, clockIndex1, domainNumber1);
+	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
+	GPTPCLOCK_FN_ENTRY(od1, clockIndex1, domainNumber1);
 
 	// get (ts2-ts1) - (ts3-ts1)/2
-        if(gptpclock_getts_od(&ts1, od)){
+	if(gptpclock_getts_od(&ts1, od)){
 		UB_LOG(UBL_ERROR, "%s:can't get ts1=TS(clk=%d,D=%d)\n",
-                       __func__, od->clockIndex, od->pp->domainNumber);
-                return -2;
-        }
-	if(gptpclock_getts_od(&ts2, od1)){
-		UB_LOG(UBL_ERROR, "%s:can't get ts2=TS(clk=%d,D=%d)\n",
-                       __func__, od1->clockIndex, od1->pp->domainNumber);
+		       __func__, od->clockIndex, od->pp->domainNumber);
 		return -2;
 	}
-        if(gptpclock_getts_od(&ts3, od)){
+	if(gptpclock_getts_od(&ts2, od1)){
+		UB_LOG(UBL_ERROR, "%s:can't get ts2=TS(clk=%d,D=%d)\n",
+		       __func__, od1->clockIndex, od1->pp->domainNumber);
+		return -2;
+	}
+	if(gptpclock_getts_od(&ts3, od)){
 		UB_LOG(UBL_ERROR, "%s:can't get ts3=TS(clk=%d,D=%d)\n",
-                       __func__, od->clockIndex, od->pp->domainNumber);
-                return -2;
-        }
+		       __func__, od->clockIndex, od->pp->domainNumber);
+		return -2;
+	}
 
 	ts3=(ts3-ts1)/2;
 	if(ts3 > od->ts2diff*10) return -1;
@@ -721,7 +711,7 @@ int gptpclock_tsconv(int64_t *ts64, int clockIndex, uint8_t domainNumber,
 		}
 	}
 	//UB_LOG(UBL_DEBUGV, "%s:(cI/dN) %d/%d -> %d/%d dtss=%"PRIi64"\n",__func__,
-	//       clockIndex, domainNumber, clockIndex1, domainNumber1, dtss);
+	//	 clockIndex, domainNumber, clockIndex1, domainNumber1, dtss);
 	*ts64+=dtss;
 	return 0;
 }
@@ -752,19 +742,6 @@ int gptpclock_rate_same(int clockIndex, uint8_t domainNumber,
 			return 0;
 	}
 	return 1;
-}
-
-int gptpclock_get_clock_params(int clockIndex, uint8_t domainNumber,
-			       uint16_t *gmTimeBaseIndicator,
-			       ScaledNs *lastGmPhaseChange,
-			       double *lastGmFreqChange)
-{
-	oneclock_data_t *od;
-	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
-	*lastGmFreqChange = od->lastGmFreqChange;
-	*gmTimeBaseIndicator = od->timeBaseIndicator;
-	*lastGmPhaseChange = od->lastGmPhaseChange;
-	return 0;
 }
 
 static int switch_active_domain(int di)
@@ -822,7 +799,7 @@ static int adjust_GM_btw_domains(int domainNumber)
 	GPTPCLOCK_FN_ENTRY(od1, 0, domainNumber);
 
 	if(gcd.pdd[0].thisClockIndex != gcd.pdd[od1->domainIndex].thisClockIndex){
-		int64_t ts64;
+		int64_t ts64=-1;
 		gptpclock_getts_od(&ts64, od);
 		gptpclock_setts_od(ts64, od1);
 		return 0;
@@ -856,14 +833,24 @@ int gptpclock_set_gmsync(int clockIndex, uint8_t domainNumber, bool becomeGM)
 	       __func__, clockIndex, domainNumber, becomeGM);
 	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
 	if(od->pp->gmsync) return 0;
+	if(becomeGM)
+		gcd.pdd[od->domainIndex].we_are_gm=true;
+	else
+		gcd.pdd[od->domainIndex].we_are_gm=false;
+
 	od->flags |= GPTPIPC_EVENT_CLOCK_FLAG_GM_SYNCED;
 	od->pp->gmsync=true;
 	if(clockIndex==0 && domainNumber!=0 && becomeGM)
 		adjust_GM_btw_domains(domainNumber);
 	if(clockIndex==0 && becomeGM && gptpconf_get_intitem(CONF_RESET_FREQADJ_BECOMEGM))
-		gptpclock_setadj(0, 0, domainNumber);
+		gptpclock_setadj(0, gcd.pdd[od->domainIndex].thisClockIndex, domainNumber);
 	GH_SET_GPTP_SHM;
 	return 0;
+}
+
+bool gptpclock_we_are_gm(int domainIndex)
+{
+	return gcd.pdd[domainIndex].we_are_gm;
 }
 
 int gptpclock_reset_gmsync(int clockIndex, uint8_t domainNumber)
@@ -888,21 +875,10 @@ int gptpclock_get_gmsync(int clockIndex, uint8_t domainNumber)
 
 void gptpclock_set_gmstable(int domainIndex, bool stable)
 {
-	oneclock_data_t *od;
 	if(domainIndex<0 || domainIndex>=gcd.shm->head.max_domains) return;
 	if(gcd.pdd[domainIndex].gm_stable==stable) return;
 	gcd.pdd[domainIndex].gm_stable=stable;
 	gptpclock_update_active_domain();
-	if((od=get_clockod(gcd.pdd[domainIndex].thisClockIndex,
-			   gcd.pdd[domainIndex].domainNumber))==NULL) return;
-	if(od->lastgm_adjvppb!=LASTGM_ADJVPPB_INVALID){
-		od->lastGmFreqChange = (double)(od->adjvppb - od->lastgm_adjvppb)/1.0E9;
-		od->flags |= GPTPIPC_EVENT_CLOCK_FLAG_FREQ_UPDATE;
-		UB_LOG(UBL_INFO, "%s:lastGmFreqChange=%fppb, last=%d, new=%d\n",
-		       __func__, od->lastGmFreqChange*1.0E9,
-		       od->lastgm_adjvppb, od->adjvppb);
-		od->lastgm_adjvppb=LASTGM_ADJVPPB_INVALID;
-	}
 }
 
 bool gptpclock_get_gmstable(int domainIndex)
@@ -918,14 +894,6 @@ int gptpclock_set_gmchange(int domainNumber, ClockIdentity clockIdentity)
 	od->flags |= GPTPIPC_EVENT_CLOCK_FLAG_GM_CHANGE;
 	od->pp->gmchange_ind++;
 	memcpy(gcd.pdd[od->domainIndex].gmClockId, clockIdentity, sizeof(ClockIdentity));
-	od->timeBaseIndicator++;
-	od->lastgm_offset64=od->offset64;
-	od->lastGmPhaseChange.nsec=0;
-	// FreqAdj is in thisClock
-	if((od=get_clockod(gcd.pdd[od->domainIndex].thisClockIndex,
-			   domainNumber))==NULL) return -1;
-	od->lastgm_adjvppb=od->adjvppb;
-	od->lastGmFreqChange=0.0;
 	GH_SET_GPTP_SHM;
 	return 0;
 }
@@ -951,12 +919,7 @@ uint32_t gptpclock_get_event_flags(int clockIndex, uint8_t domainNumber)
 int gptpclock_get_ipc_clock_data(int clockIndex, uint8_t domainNumber, gptpipc_clock_data_t *cd)
 {
 	oneclock_data_t *od;
-	double lastGmFreqChange;
 	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
-	lastGmFreqChange = (double)od->adjvppb/1.0E9;
-	memcpy(&cd->lastGmFreqChangePk, &lastGmFreqChange, sizeof(double));
-	cd->gmTimeBaseIndicator = od->timeBaseIndicator;
-	cd->lastGmPhaseChange_nsec = od->lastGmPhaseChange.nsec;
 	cd->gmsync = od->pp->gmsync;
 	cd->domainNumber = od->pp->domainNumber;
 	memcpy(cd->clockId, od->clockId, sizeof(ClockIdentity));
@@ -1034,20 +997,20 @@ mutexout:
 
 int64_t gptpclock_d0ClockfromRT(int clockIndex)
 {
-        oneclock_data_t *od;
+	oneclock_data_t *od;
 	int64_t ts1, ts2, ts3;
-        GPTPCLOCK_FN_ENTRY(od, clockIndex, 0);
-        if(gptpclock_getts_od(&ts1, od)){
+	GPTPCLOCK_FN_ENTRY(od, clockIndex, 0);
+	if(gptpclock_getts_od(&ts1, od)){
 		UB_LOG(UBL_ERROR, "%s:can't get ts1=TS(clk=%d,D=%d)\n",
-                       __func__, od->clockIndex, od->pp->domainNumber);
-                return 0;
-        }
+		       __func__, od->clockIndex, od->pp->domainNumber);
+		return 0;
+	}
 	ts2=ub_rt_gettime64();
-        if(gptpclock_getts_od(&ts3, od)){
+	if(gptpclock_getts_od(&ts3, od)){
 		UB_LOG(UBL_ERROR, "%s:can't get ts3=TS(clk=%d,D=%d)\n",
-                       __func__, od->clockIndex, od->pp->domainNumber);
-                return 0;
-        }
+		       __func__, od->clockIndex, od->pp->domainNumber);
+		return 0;
+	}
 	ts3=(ts3-ts1)/2;
 	if(ts3 > od->ts2diff*10) {
 		UB_LOG(UBL_WARN,"%s:gap of 2 ts is too big:clockIndex=%d, domainNumber=%d, %"
@@ -1056,4 +1019,13 @@ int64_t gptpclock_d0ClockfromRT(int clockIndex)
 	UB_LOG(UBL_DEBUGV,"%s:%d, %d, %"PRIi64"\n",
 	       __func__, od->clockIndex, od->pp->domainNumber, ts1-ts2+ts3);
 	return ts1-ts2+ts3;
+}
+
+int gptpclock_get_adjppb(int clockIndex, int domainNumber)
+{
+	oneclock_data_t *od;
+	if((od=get_clockod(clockIndex, domainNumber))==NULL) return 0;
+	if(clockIndex==0)
+		return gcd.pdd[od->domainIndex].thisClock_adjppb;
+	return od->adjvppb;
 }

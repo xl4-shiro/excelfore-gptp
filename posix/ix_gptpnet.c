@@ -25,6 +25,7 @@
 #include <sys/un.h>
 #include "gptpnet.h"
 #include "gptpclock.h"
+#include "xl4combase/cb_ethernet.h"
 
 
 #define GPTPNET_FRAME_SIZE (GPTP_MAX_PACKET_SIZE+sizeof(CB_ETHHDR_T))
@@ -135,15 +136,17 @@ erexit:
 static int onenet_activate(gptpnet_data_t *gpnet, int ndevIndex)
 {
 	netdevice_t *ndev=&gpnet->netdevices[ndevIndex];
+	uint32_t linkstate=0;
 	uint32_t speed;
 	uint32_t duplex;
+	cb_get_ethtool_linkstate(ndev->fd, ndev->nlstatus.devname, &linkstate);
 	cb_get_ethtool_info(ndev->fd, ndev->nlstatus.devname,
 			    &speed, &duplex);
+
+	ndev->nlstatus.up = linkstate?true:false;
 	ndev->nlstatus.speed=speed;
 	ndev->nlstatus.duplex=duplex;
-	if(ndev->nlstatus.speed > 0)
-		ndev->nlstatus.up = true;
-	else
+	if(ndev->nlstatus.speed == 0)
 		ndev->nlstatus.up = false;
 	if(!gpnet->cb_func || !ndev->nlstatus.up) return 0;
 	return gpnet->cb_func(gpnet->cb_data, ndevIndex+1, GPTPNET_EVENT_DEVUP,
@@ -167,6 +170,7 @@ static int netlink_msg_handler(gptpnet_data_t *gpnet, struct nlmsghdr *msg)
 	int ndevIndex;
 	struct ifinfomsg *ifi;
 	event_data_netlink_t edtnl;
+	uint32_t linkstate;
 	uint32_t speed;
 	uint32_t duplex;
 
@@ -183,13 +187,20 @@ static int netlink_msg_handler(gptpnet_data_t *gpnet, struct nlmsghdr *msg)
 		event=GPTPNET_EVENT_DEVDOWN;
 		edtnl.up=false;
 	}else{
-		cb_get_ethtool_info(gpnet->netdevices[ndevIndex].fd,
-				    gpnet->netdevices[ndevIndex].nlstatus.devname,
-				    &speed, &duplex);
-		edtnl.speed=speed;
-		edtnl.duplex=duplex;
-		event=GPTPNET_EVENT_DEVUP;
-		edtnl.up=true;
+		cb_get_ethtool_linkstate(gpnet->netdevices[ndevIndex].fd,
+				gpnet->netdevices[ndevIndex].nlstatus.devname,
+				&linkstate);
+		edtnl.up=linkstate?true:false;
+		if(edtnl.up){
+			cb_get_ethtool_info(gpnet->netdevices[ndevIndex].fd,
+					gpnet->netdevices[ndevIndex].nlstatus.devname,
+					&speed, &duplex);
+			edtnl.speed=speed;
+			edtnl.duplex=duplex;
+			event=GPTPNET_EVENT_DEVUP;
+		}else{
+			event=GPTPNET_EVENT_DEVDOWN;
+		}
 	}
 	if(!memcmp(&edtnl, &gpnet->netdevices[ndevIndex].nlstatus, sizeof(event_data_netlink_t)))
 		return 0; // status no change
@@ -314,6 +325,7 @@ static int read_netdev_event(gptpnet_data_t *gpnet, int dvi)
 	char control[512];
 	unsigned char buf[GPTPNET_FRAME_SIZE];
 	int res;
+	netdevice_t *ndev=&gpnet->netdevices[dvi];
 
 	vec[0].iov_base = buf;
 	vec[0].iov_len = sizeof(buf);
@@ -323,7 +335,7 @@ static int read_netdev_event(gptpnet_data_t *gpnet, int dvi)
 	msg.msg_control = control;
 	msg.msg_controllen = sizeof(control);
 
-	res = recvmsg(gpnet->netdevices[dvi].fd, &msg, MSG_ERRQUEUE | MSG_DONTWAIT);
+	res = recvmsg(ndev->fd, &msg, MSG_ERRQUEUE | MSG_DONTWAIT);
 	if(res > 0){
 		return read_txts(gpnet, dvi, &msg, res);
 	}else if(res == 0){
@@ -336,14 +348,30 @@ static int read_netdev_event(gptpnet_data_t *gpnet, int dvi)
 		return -1;
 	}
 
-	res = recvmsg(gpnet->netdevices[dvi].fd, &msg, MSG_DONTWAIT);
+	res = recvmsg(ndev->fd, &msg, MSG_DONTWAIT);
 	if (res > 0){
+		if(!ndev->nlstatus.up &&
+		   strstr(ndev->nlstatus.devname,
+			  CB_VIRTUAL_ETHDEV_PREFIX)==ndev->nlstatus.devname){
+			UB_LOG(UBL_DEBUG,"%s:deviceIndex=%d, device up\n", __func__, dvi);
+			ndev->nlstatus.up=true;
+			gpnet->cb_func(gpnet->cb_data, dvi+1, GPTPNET_EVENT_DEVUP,
+				       &gpnet->event_ts64, &ndev->nlstatus);
+		}
 		return read_recdata(gpnet, dvi, &msg, res);
 	}else if(res == 0){
 		UB_LOG(UBL_ERROR,"%s:deviceIndex=%d, recvmsg returned 0\n", __func__, dvi);
 		return -1;
 	}else if(errno!=EAGAIN ) {
-		if(gpnet->netdevices[dvi].ovip_port && errno==ECONNREFUSED){
+		if(ndev->ovip_port && errno==ECONNREFUSED){
+			if(ndev->nlstatus.up &&
+			   strstr(ndev->nlstatus.devname,
+				  CB_VIRTUAL_ETHDEV_PREFIX)==ndev->nlstatus.devname){
+				UB_LOG(UBL_DEBUG,"%s:deviceIndex=%d, device down\n", __func__, dvi);
+				ndev->nlstatus.up=false;
+				gpnet->cb_func(gpnet->cb_data, dvi+1, GPTPNET_EVENT_DEVDOWN,
+					       &gpnet->event_ts64, &ndev->nlstatus);
+			}
 			// need to wait a connection
 			return 1;
 		}
@@ -465,7 +493,7 @@ gptpnet_data_t *gptpnet_init(gptpnet_cb_t cb_func, cb_ipcsocket_server_rdcb ipc_
 		return NULL;
 	}
 	gpnet=malloc(sizeof(gptpnet_data_t));
-	ub_assert(gpnet, __func__, "malloc");
+	ub_assert(gpnet!=NULL, __func__, "malloc");
 	memset(gpnet, 0, sizeof(gptpnet_data_t));
 	gpnet->num_netdevs=i;
 	*num_ports=i;
@@ -664,4 +692,10 @@ void gptpnet_extra_timeout(gptpnet_data_t *gpnet, int toutns)
 	if(toutns==0) toutns=gptpconf_get_intitem(CONF_GPTPNET_EXTRA_TOUTNS);
 	gpnet->next_tout64=ub_mt_gettime64();
 	gpnet->next_tout64+=toutns;
+}
+
+int gptpnet_tsn_schedule(gptpnet_data_t *gpnet, uint32_t aligntime, uint32_t cycletime)
+{
+	/* IEEE 802.1qbv (time-aware traffic shaping) not yet supported */
+	return 0;
 }

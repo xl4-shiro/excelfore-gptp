@@ -45,3 +45,7 @@ xl4gptp_*.changes
 xl4gptp_*.deb
 xl4_header.tex
 gh_gptpmasterclock.h
+.cert.json
+.misra.json
+make_cppcheck.mk
+tags

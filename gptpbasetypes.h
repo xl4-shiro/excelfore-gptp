@@ -42,14 +42,14 @@
 
 /**
  * @brief Macro to define maximum path trace.
- * @note the possible maximum number is 179 but we won't have such deep layers
- * and limit to a smaller number here
+ * @note The maximum possible number is 179 based on specification we can set
+ * the maximum here and restrict the frame using MAX_PTP_PACKET instead
  * @code{.c}
  * #define MAX_PATH_TRACE_N 179
  * @endcode
  * @see 10.3.8.23 pathTrace
  */
-#define MAX_PATH_TRACE_N 16
+#define MAX_PATH_TRACE_N 179
 
 /**
  * @brief Macro which defines Clock Identity Length.

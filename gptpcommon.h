@@ -21,7 +21,6 @@
 #ifndef __GPTPCOMMON_H_
 #define __GPTPCOMMON_H_
 #include "gptpbasetypes.h"
-#include "gptp_defaults.h"
 #include "gptp_config.h"
 
 /****************************************

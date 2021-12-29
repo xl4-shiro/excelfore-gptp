@@ -291,7 +291,7 @@ static void *superior_master_port_proc(port_announce_information_data_t *sm, uin
 	RESELECT[sm->portIndex] = true;
 	SELECTED[sm->portIndex] = false;
 	RCVD_MSG = false;
-	RCVD_ANNOUNCE_PTR = false;
+	RCVD_ANNOUNCE_PTR = NULL;
 	return NULL;
 }
 
@@ -307,7 +307,7 @@ static void *repeated_master_port_proc(port_announce_information_data_t *sm, uin
 		__func__, sm->domainIndex, sm->portIndex);
 	ANN_RECEIPT_TIMEOUT_TIME.nsec = cts64 + ANN_RECEIPT_TIMEOUT_TIME_INTERVAL.nsec;
 	RCVD_MSG = false;
-	RCVD_ANNOUNCE_PTR = false;
+	RCVD_ANNOUNCE_PTR = NULL;
 	return NULL;
 }
 
@@ -322,7 +322,7 @@ static void *inferior_master_or_other_port_proc(port_announce_information_data_t
 	UB_LOG(UBL_DEBUGV, "port_announce_information:%s:domainIndex=%d, portIndex=%d\n",
 		__func__, sm->domainIndex, sm->portIndex);
 	RCVD_MSG = false;
-	RCVD_ANNOUNCE_PTR = false;
+	RCVD_ANNOUNCE_PTR = NULL;
 	return NULL;
 }
 

@@ -26,8 +26,23 @@
 // 10.4.3 Addresses
 #define GPTP_MULTICAST_DEST_ADDR {0x01,0x80,0xC2,0x00,0x00,0x0E}
 
-// 256 should be enough for 802.1AS
-#define GPTP_MAX_PACKET_SIZE 256
+/* Maximum buffer size for PTP packets
+ * This size is refered to by receive buffer queue and send buffer which may
+ * result to the following total size statically allocated for these buffers:
+ *  = (receive queue allocations) + (send buffer allocation)
+ *  = (number of ports x GPTP_MAX_PACKET_SIZE x 2) + (GPTP_MAX_PACKET_SIZEx1)
+ *
+ * For optimization purposes, value of 256 should be enough for usual 802.1AS
+ * frames. This value can be changed to this optimized value when memory
+ * constraints is an issue.
+ *
+ * However, for Announce message which can contain variable size TLV, the
+ * specified maximum TLV size is 1428 thus technically, the maximum frame for
+ * Announce should be 1428+4+68=1500 bytes. It is also a mandatory requirement
+ * for AVNU to support TLV of maximum length (gPTP.br.c.24.01 and
+ * gPTP.br.c.24.02).
+ */
+#define GPTP_MAX_PACKET_SIZE 1500
 
 typedef struct gptpnet_data gptpnet_data_t;
 
@@ -77,12 +92,7 @@ uint8_t *gptpnet_get_sendbuf(gptpnet_data_t *gpnet, int ndevIndex);
 int gptpnet_send(gptpnet_data_t *gpnet, int ndevIndex, uint16_t length);
 char *gptpnet_ptpdev(gptpnet_data_t *gpnet, int ndevIndex);
 int gptpnet_num_netdevs(gptpnet_data_t *gpnet);
-#if defined(SJA1105)
 int gptpnet_tsn_schedule(gptpnet_data_t *gpnet, uint32_t aligntime, uint32_t cycletime);
-#else
-static inline int gptpnet_tsn_schedule(gptpnet_data_t *gpnet, uint32_t aligntime,
-				       uint32_t cycletime) {return 0;}
-#endif
 
 /**
  * @brief return portid, which is extended from MAC address by inserting FF:FE

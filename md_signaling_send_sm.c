@@ -108,7 +108,7 @@ static int sendSignaling(md_signaling_send_data_t *sm)
                                 sm->sequenceId,
                                 0x7f);
 	// 10.6.4.2.1 targetPortIdentity is 0xff
-	memset(sdata+sizeof(MDPTPMsgHeader), 0xff, sizeof(MDPortIdentity));
+	memset(((uint8_t*)sdata)+sizeof(MDPTPMsgHeader), 0xff, sizeof(MDPortIdentity));
 	((MDPTPMsgHeader*)sdata)->domainNumber=sm->ptasg->domainNumber;
 	switch(sm->stype){
 	case MD_SIGNALING_MSG_INTERVAL_REQ:
@@ -252,7 +252,7 @@ void *md_signaling_send_sm_mdSignalingSend(md_signaling_send_data_t *sm, void *m
 	}else{
 		UB_LOG(UBL_WARN,
 		       "%s:domainIndex=%d, portIndex=%d unknown organizationSubType=%d\n",
-		       __func__, sm->domainIndex, sm->portIndex, stype);
+		       __func__, sm->domainIndex, sm->portIndex, (int)stype);
 		return NULL;
 	}
 	sm->rcvd_txmsg=msg;

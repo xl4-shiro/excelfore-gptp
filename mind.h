@@ -22,7 +22,6 @@
 #define __MIND_H_
 
 #include "gptpbasetypes.h"
-#include "gptp_defaults.h"
 
 #define NUMBER_OF_PORTS 2
 
@@ -76,6 +75,8 @@ typedef struct PortSyncSync {
 	double lastGmFreqChange;
 	// As portNumber is not the same as portIndex, we keep portIndex separately
 	int16_t localPortIndex;
+	// Next send time relative to current time
+	UScaledNs syncNextSendTimeoutTime;
 	PerPortGlobal *local_ppg; // per-port-global for the localPort
 } PortSyncSync;
 
@@ -110,6 +111,8 @@ typedef struct PerTimeAwareSystemGlobal {
 	int8_t clockMasterLogSyncInterval;
 	bool gm_stable_initdone;
 	bool asCapableOrAll;
+	// Flag to determine if AVNU is followed over 802.1AS
+	bool conformToAvnu;
 } PerTimeAwareSystemGlobal;
 
 // 10.2.4 Per-port global variables
@@ -170,7 +173,8 @@ struct PerPortGlobal {
 typedef struct SiteSyncSyncSM {
 	bool rcvdPSSync;
 	PortSyncSync *rcvdPSSyncPtr;
-	PortSyncSync *txPSSyncPtr;
+	// 802.1AS-2020 10.2.7.1.3 txPSSyncPtrSSS
+	PortSyncSync *txPSSyncPtrSSS;
 } SiteSyncSyncSM;
 
 // 10.2.7 PortSyncSyncReceive state machine
@@ -252,12 +256,12 @@ typedef struct BmcsPerTimeAwareSystemGlobal {
 	UInteger224 systemPriority;
 	UInteger224 gmPriority;
 	UInteger224 lastGmPriority;
-        // Addition of pathTrace length
-        uint8_t pathTraceCount;
+	// Addition of pathTrace length
+	uint8_t pathTraceCount;
 	ClockIdentity pathTrace[MAX_PATH_TRACE_N];
 	Enumeration8 externalPortConfiguration;
 	uint32_t lastAnnouncePort;
-        int bmcsQuickUpdate;
+	int bmcsQuickUpdate;
 } BmcsPerTimeAwareSystemGlobal;
 
 // 10.3.9 Per-port global variables
@@ -285,14 +289,14 @@ typedef struct BmcsPerPortGlobal {
 	bool annFrequencyTraceable;
 	int16_t annCurrentUtcOffset;
 	Enumeration8 annTimeSource;
-        // ??? global pathTrace is updated only when portState is known
-        // to be SlavePort, in the case when system is grandmaster (no SlavePort)
-        // and the Announce received may convey transition of portState to SlavePort
-        // a copy of the announce pathSequence should be used for global pathTrace
-        uint8_t annPathSequenceCount;
+	// ??? global pathTrace is updated only when portState is known
+	// to be SlavePort, in the case when system is grandmaster (no SlavePort)
+	// and the Announce received may convey transition of portState to SlavePort
+	// a copy of the announce pathSequence should be used for global pathTrace
+	uint8_t annPathSequenceCount;
 	ClockIdentity annPathSequence[MAX_PATH_TRACE_N];
-        // Additional from 10.7.3 Timeouts
-        int8_t announceReceiptTimeout;
+	// Additional from 10.7.3 Timeouts
+	int8_t announceReceiptTimeout;
 } BmcsPerPortGlobal;
 
 // 10.3.9.4 infoIs
@@ -398,7 +402,7 @@ typedef struct PTPMsgHeader {
 
 // 10.6.3 Announce message
 struct PTPMsgAnnounce {
-        PTPMsgHeader header;
+	PTPMsgHeader header;
 	int16_t currentUtcOffset;
 	uint8_t grandmasterPriority1;
 	ClockQuality grandmasterClockQuality;

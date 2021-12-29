@@ -163,7 +163,7 @@ int main_loop(void)
 					break;
 				}
 			}
-			if(abs(dts64b[i+1]-dts64a[i+1])>(UB_SEC_NS/1000)){
+			if(labs(dts64b[i+1]-dts64a[i+1])>(UB_SEC_NS/1000)){
 				jump=true;
 				printf("big jump(%"PRIi64"nsec) happned, domain=%d\n",
 				       dts64b[i+1]-dts64a[i+1], i);
