@@ -27,6 +27,7 @@
 #include "gptpipc.h"
 #include "mdeth.h"
 #include "md_abnormal_hooks.h"
+#include "xl4unibase/unibase_macros.h"
 #include <xl4unibase/unibase_binding.h>
 
 static int main_terminate;
@@ -251,8 +252,34 @@ static int read_stdin(gptpipc_thread_data_t *ipctd)
 
 static int ipcmon_notice_cb(gptpipc_gptpd_data_t *ipcrd, void *ptr)
 {
-	//printf("%s:domainNumber=%d, portIndex=%d, flag=0x%08X\n", __func__,
-	//       notice->domainNumber, notice->portIndex, notice->event_flags);
+	switch(ipcrd->dtype){
+	case GPTPIPC_GPTPD_GPORTD:
+		/* do nothing */
+		break;
+	case GPTPIPC_GPTPD_CLOCKD:
+		/* The following displays received clock data contents for gptp
+		 * `thisClock` (portIndex=0). */
+		if(ipcrd->u.clockd.portIndex==0){
+			printf("-----------------------------------------------------------\n");
+			printf("%s: domainNumber=%d, portIndex=%d clockIdentity="UB_PRIhexB8"\n"
+					"\t %s GM="UB_PRIhexB8"\n"
+					"\t lastSyncSeqID=%d lastSyncReceiptTime_nsec=%"PRIu64" lastSyncReceiptLocalTime_nsec=%"PRIu64"\n"
+					"\t adjppb=%d\n",
+					__func__, ipcrd->u.clockd.domainNumber, ipcrd->u.clockd.portIndex,
+					UB_ARRAY_B8(ipcrd->u.clockd.clockId),
+					ipcrd->u.clockd.gmsync?"GM_SYNC":"GM_UNSYNC",
+					UB_ARRAY_B8(ipcrd->u.clockd.gmClockId),
+					ipcrd->u.clockd.lastSyncSeqID, ipcrd->u.clockd.lastSyncReceiptTime_nsec,
+					ipcrd->u.clockd.lastSyncReceiptLocalTime_nsec,
+					ipcrd->u.clockd.adjppb);
+			printf("-----------------------------------------------------------\n");
+		}
+		break;
+	default:
+		/* do nothing */
+		break;
+	}
+
 	return 0;
 }
 

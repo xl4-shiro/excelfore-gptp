@@ -46,7 +46,7 @@ static void print_ipc_data(gptpipc_gptpd_data_t *rd)
 
 	switch(rd->dtype){
 	case GPTPIPC_GPTPD_NOTICE:
-		printf("GPTPD_NOTICE domainNumber=%d portIndex=%d ",
+		printf("GPTPD_NOTICE domainNumber=%"PRIi32" portIndex=%"PRIi32" ",
 		       rd->u.notice.domainNumber, rd->u.notice.portIndex);
 		if(rd->u.notice.event_flags & GPTPIPC_EVENT_CLOCK_FLAG_NETDEV_DOWN)
 			printf("DWON ");
@@ -69,8 +69,7 @@ static void print_ipc_data(gptpipc_gptpd_data_t *rd)
 			printf("GM_UNSYNC ");
 		if(rd->u.notice.event_flags & GPTPIPC_EVENT_CLOCK_FLAG_GM_CHANGE){
 			printf("GM_CHANGE new GM="UB_PRIhexB8,
-			       UB_ARRAY_B8(
-				       rd->u.notice.gmPriority.rootSystemIdentity.clockIdentity));
+			       UB_ARRAY_B8(rd->u.notice.gmIdentity));
 		}
 		printf("\n");
 		break;
@@ -85,31 +84,37 @@ static void print_ipc_data(gptpipc_gptpd_data_t *rd)
 		else if(rd->u.ndportd.nlstatus.duplex==2)
 			duplex="half";
 
-		printf("%s speed=%u duplex=%s portid=%s\n", rd->u.ndportd.nlstatus.devname,
+		printf("%s speed=%"PRIu32" duplex=%s portid=%s\n", rd->u.ndportd.nlstatus.devname,
 		       rd->u.ndportd.nlstatus.speed, duplex,
 		       ub_bsid2ssid(rd->u.ndportd.nlstatus.portid, astr));
 		break;
 	case GPTPIPC_GPTPD_CLOCKD:
 		printf("GPTPD_CLOCKD ");
-		printf("domainNumber=%d portIndex=%d ",
+		printf("domainNumber=%"PRIi32" portIndex=%"PRIi32" ",
 		       rd->u.clockd.domainNumber, rd->u.clockd.portIndex);
 		if(rd->u.clockd.gmsync)
 			printf("GM_SYNC\n");
 		else
 			printf("GM_UNSYNC\n");
 		memcpy(&lastGmFreqChange, &rd->u.clockd.lastGmFreqChangePk, sizeof(double));
-		printf("  gmTimeBaseIndicator=%u lastGmPhaseChange=%"PRIi64
-		       ", lastGmFreqChange=%.9f adjfreq=%dppb\n",
+		printf("  gmTimeBaseIndicator=%u lastGmPhaseChange=%"PRIi64"\n"
+			   "  lastSyncSeqID=%d lastSyncReceiptTime_nsec=%"PRIu64" lastSyncReceiptLocalTime_nsec=%"PRIu64"\n"
+		       ", lastGmFreqChange=%.9f adjfreq=%"PRIi32"ppb\n",
 		       rd->u.clockd.gmTimeBaseIndicator, rd->u.clockd.lastGmPhaseChange_nsec,
-		       lastGmFreqChange, rd->u.clockd.adjppb);
+			   rd->u.clockd.lastSyncSeqID, rd->u.clockd.lastSyncReceiptTime_nsec,
+			   rd->u.clockd.lastSyncReceiptLocalTime_nsec,
+			   lastGmFreqChange, rd->u.clockd.adjppb);
 		break;
 	case GPTPIPC_GPTPD_GPORTD:
 		printf("GPTPD_GPORTD ");
-		printf("domainNumber=%d portIndex=%d asCapable=%s gmStable=%s state=%s\n",
+		printf("domainNumber=%"PRIi32" portIndex=%"PRIi32" asCapable=%s gmStable=%s state=%s\n"
+		       "  pDelay=%"PRIu64" pDelayRateRatio=%f\n",
 		       rd->u.gportd.domainNumber, rd->u.gportd.portIndex,
 		       rd->u.gportd.asCapable?"True":"False",
 		       rd->u.gportd.gmStable?"True":"False",
-		       selectedStateStr(rd->u.gportd.selectedState));
+		       selectedStateStr(rd->u.gportd.selectedState),
+		       rd->u.gportd.pDelay,
+		       rd->u.gportd.pDelayRateRatio);
 		if(!rd->u.gportd.asCapable){
 			printf("\n");
 			break;
@@ -122,31 +127,31 @@ static void print_ipc_data(gptpipc_gptpd_data_t *rd)
 		}
 		break;
 	case GPTPIPC_GPTPD_STATSD:
-		printf("GPTPD_STATSD --- portIndex=%d\n", rd->u.statsd.portIndex);
-		printf("pdelay_req_send=%u\n", rd->u.statsd.pdelay_req_send);
-		printf("pdelay_resp_rec=%u\n", rd->u.statsd.pdelay_resp_rec);
-		printf("pdelay_resp_rec_valid=%u\n", rd->u.statsd.pdelay_resp_rec_valid);
-		printf("pdelay_resp_fup_rec=%u\n", rd->u.statsd.pdelay_resp_fup_rec);
-		printf("pdelay_resp_fup_rec_valid=%u\n", rd->u.statsd.pdelay_resp_fup_rec_valid);
-		printf("pdelay_req_rec=%u\n", rd->u.statsd.pdelay_req_rec);
-		printf("pdelay_req_rec_valid=%u\n", rd->u.statsd.pdelay_req_rec_valid);
-		printf("pdelay_resp_send=%u\n", rd->u.statsd.pdelay_resp_send);
-		printf("pdelay_resp_fup_send=%u\n", rd->u.statsd.pdelay_resp_fup_send);
+		printf("GPTPD_STATSD --- portIndex=%"PRIi32"\n", rd->u.statsd.portIndex);
+		printf("pdelay_req_send=%"PRIu32"\n", rd->u.statsd.pdelay_req_send);
+		printf("pdelay_resp_rec=%"PRIu32"\n", rd->u.statsd.pdelay_resp_rec);
+		printf("pdelay_resp_rec_valid=%"PRIu32"\n", rd->u.statsd.pdelay_resp_rec_valid);
+		printf("pdelay_resp_fup_rec=%"PRIu32"\n", rd->u.statsd.pdelay_resp_fup_rec);
+		printf("pdelay_resp_fup_rec_valid=%"PRIu32"\n", rd->u.statsd.pdelay_resp_fup_rec_valid);
+		printf("pdelay_req_rec=%"PRIu32"\n", rd->u.statsd.pdelay_req_rec);
+		printf("pdelay_req_rec_valid=%"PRIu32"\n", rd->u.statsd.pdelay_req_rec_valid);
+		printf("pdelay_resp_send=%"PRIu32"\n", rd->u.statsd.pdelay_resp_send);
+		printf("pdelay_resp_fup_send=%"PRIu32"\n", rd->u.statsd.pdelay_resp_fup_send);
 		break;
 	case GPTPIPC_GPTPD_STATTD:
-		printf("GPTPD_STATTD --- domainNumber=%d portIndex=%d\n",
+		printf("GPTPD_STATTD --- domainNumber=%"PRIi32" portIndex=%"PRIi32"\n",
 		       rd->u.stattd.domainNumber, rd->u.stattd.portIndex);
-		printf("sync_send=%u\n", rd->u.stattd.sync_send);
-		printf("sync_fup_send=%u\n", rd->u.stattd.sync_fup_send);
-		printf("sync_rec=%u\n", rd->u.stattd.sync_rec);
-		printf("sync_rec_valid=%u\n", rd->u.stattd.sync_rec_valid);
-		printf("sync_fup_rec=%u\n", rd->u.stattd.sync_fup_rec);
-		printf("sync_fup_rec_valid=%u\n", rd->u.stattd.sync_fup_rec_valid);
-		printf("signal_msg_interval_send=%u\n", rd->u.stattd.signal_msg_interval_send);
-		printf("signal_gptp_capable_send=%u\n", rd->u.stattd.signal_gptp_capable_send);
-		printf("signal_rec=%u\n", rd->u.stattd.signal_rec);
-		printf("signal_msg_interval_rec=%u\n", rd->u.stattd.signal_msg_interval_rec);
-		printf("signal_gptp_capable_rec=%u\n", rd->u.stattd.signal_gptp_capable_rec);
+		printf("sync_send=%"PRIu32"\n", rd->u.stattd.sync_send);
+		printf("sync_fup_send=%"PRIu32"\n", rd->u.stattd.sync_fup_send);
+		printf("sync_rec=%"PRIu32"\n", rd->u.stattd.sync_rec);
+		printf("sync_rec_valid=%"PRIu32"\n", rd->u.stattd.sync_rec_valid);
+		printf("sync_fup_rec=%"PRIu32"\n", rd->u.stattd.sync_fup_rec);
+		printf("sync_fup_rec_valid=%"PRIu32"\n", rd->u.stattd.sync_fup_rec_valid);
+		printf("signal_msg_interval_send=%"PRIu32"\n", rd->u.stattd.signal_msg_interval_send);
+		printf("signal_gptp_capable_send=%"PRIu32"\n", rd->u.stattd.signal_gptp_capable_send);
+		printf("signal_rec=%"PRIu32"\n", rd->u.stattd.signal_rec);
+		printf("signal_msg_interval_rec=%"PRIu32"\n", rd->u.stattd.signal_msg_interval_rec);
+		printf("signal_gptp_capable_rec=%"PRIu32"\n", rd->u.stattd.signal_gptp_capable_rec);
 		break;
 	default:
 		printf("unknonw data\n");
@@ -197,10 +202,10 @@ static void *gptpipc_thread_proc(void *ptr)
 	int suppress_msg = 0;
 
 	while(!ipcpd->ipcstop){
-		if(!ipcpd->ipcfd){
+		if(!CB_SOCKET_VALID(ipcpd->ipcfd)){
 			if(suppress_msg) ub_log_change(CB_COMBASE_LOGCAT, UBL_NONE, UBL_NONE);
 			if(gptpipc_socket_open(ipcpd)) {
-				ipcpd->ipcfd=0;
+				ipcpd->ipcfd=CB_SOCKET_INVALID_VALUE;
 				UB_LOG(UBL_DEBUG, "cann't connect to gptp2d, "
 				       "wait 100msec and try again\n");
 				usleep(100000);
@@ -266,16 +271,16 @@ static void *gptpipc_thread_proc(void *ptr)
 	reinit:
 		UB_LOG(UBL_ERROR, "%s:ipcfd error, try to reconnect\n",__func__);
 		close(ipcpd->ipcfd);
-		ipcpd->ipcfd=0;
+		ipcpd->ipcfd=CB_SOCKET_INVALID_VALUE;
 		continue;
 	}
-	if(ipcpd->ipcfd) {
+	if(CB_SOCKET_VALID(ipcpd->ipcfd)) {
 		if(ipcpd->udpport)
 			cb_ipcsocket_close(ipcpd->ipcfd, NULL, NULL);
 		else
 			cb_ipcsocket_close(ipcpd->ipcfd, GPTP2D_IPC_CB_SOCKET_NODE, ipcpd->pname);
 	}
-	ipcpd->ipcfd=0;
+	ipcpd->ipcfd=CB_SOCKET_INVALID_VALUE;
 	UB_LOG(UBL_INFO, "closing gptpipc_thread_proc\n");
 	return NULL;
 }
@@ -293,13 +298,14 @@ int gptpipc_init(gptpipc_thread_data_t *ipctd, int wait_toutsec)
 	const char *thread_name="avtpd_gptpd_ipc_thread";
 	cb_xl4_thread_attr_t attr;
 
+	ipctd->ipcfd=CB_SOCKET_INVALID_VALUE;
 	cb_xl4_thread_attr_init(&attr, THREAD_SAME_PRI, THREAD_NORM_STACK, thread_name);
 	if(CB_THREAD_CREATE(&ipctd->ipcthread, &attr, gptpipc_thread_proc, ipctd)){
 		UB_LOG(UBL_ERROR,"%s:CB_THREAD_CREATE, %s\n", __func__, strerror(errno));
 		return -1;
 	}
 	if(wait_toutsec){
-		while(ipctd->ipcfd==0) {
+		while(!CB_SOCKET_VALID(ipctd->ipcfd)) {
 			usleep(100000);
 			tcount+=100;
 			if(wait_toutsec>0 && tcount>wait_toutsec*1000) return -1;

@@ -100,8 +100,21 @@ static double computePdelayRateRatio(md_pdelay_req_data_t *sm, double oldRateRat
 	mind=sm->mdeg->forAllDomain->pdelayReqInterval.nsec / 2;
 	maxd=sm->mdeg->forAllDomain->pdelayReqInterval.nsec + mind;
 	if(dt1 > mind && dt1 < maxd && dt2 > mind && dt2 < maxd){
-		// compute following sample computation in 802.1AS-2020 12.5.2.4.4
-		pDelayRateRatio = (double)(sm->t1ts64-sm->prev_t1ts64)/(sm->t2ts64-sm->prev_t2ts64);
+		/* 802.1AS-2020 Section 10.2.5.7 neighborRateRatio
+		 * The neighborRateRatio is defined as the ratio of "frequency of the
+		 * LocalClock entity of this TAS at the other end of the link" to the
+		 * "frequency of the LocalClock entity of this TAS."
+		 * Therefore, the ratio should be computed as "delta of TS at peer" over
+		 * "delta of TS at this TAS".
+		 *
+		 * Note that this is in relation to the formula used in computing the
+		 * computePropTime() where the resulting neighborRateRatio is to be
+		 * applied to the difference in pdelayRespEventIngressTimestamp (t4) -
+		 * pdelayReqEventEgressTimestamp (t1), to illustrate:
+		 *   D = [r x (t4 - t1)] - (t3 - t2) / 2
+		 * In other words, converting the difference in the frequency of the peer(responder).
+		 */
+		pDelayRateRatio = (double)(sm->t2ts64-sm->prev_t2ts64)/(sm->t1ts64-sm->prev_t1ts64);
 		// neighborRateValid should be set to TRUE only after 2 valid responses
 		if(!sm->thisSM->neighborRateRatioValid){
 			sm->thisSM->neighborRateRatioValid=true;
@@ -120,7 +133,18 @@ static double computePdelayRateRatio(md_pdelay_req_data_t *sm, double oldRateRat
 static uint64_t computePropTime(md_pdelay_req_data_t *sm)
 {
 	int64_t rts;
-	rts = (((sm->ppg->forAllDomain->neighborRateRatio)*(int64_t)((sm->t4ts64 - sm->t1ts64)) - (sm->t3ts64 - sm->t2ts64)))/2;
+	/* 802.1AS-2020 Section 11.2.19.3.4 computePropTime
+	 * The suggested equation given in the standards will be used in order to
+	 * keep the coherence of the implementation in reference with the standards.
+	 * Therefore, the following equation will be applied:
+	 *   D = [r x (t4 - t1)] - (t3 - t2) / 2
+	 *
+	 * Do note that the neighborRateRatio (r) above needs to correspond to the
+	 * rate of "delta of TS at peer" over "delta of TS at this TAS", see
+	 * computePdelayRateRatio().
+	 */
+	rts = ( sm->ppg->forAllDomain->neighborRateRatio*(int64_t)(sm->t4ts64 - sm->t1ts64) -
+		(int64_t)(sm->t3ts64 - sm->t2ts64) )/2;
 	if(rts<0 || rts>COMPUTED_PROP_TIME_TOO_BIG){
 		UB_LOG(UBL_WARN, "%s: computed PropTime is out of range = %"PRIi64", set 0\n",
 		       __func__, rts);
@@ -237,6 +261,7 @@ static void *reset_proc(md_pdelay_req_data_t *sm)
 		if(!sm->mdeg->forAllDomain->asCapableAcrossDomains) return NULL;
 		sm->mdeg->forAllDomain->asCapableAcrossDomains = false;
 		sm->thisSM->neighborRateRatioValid=false;
+		sm->ppg->forAllDomain->neighborRateRatio = 1;
 		UB_LOG(UBL_INFO, "%s:reset asCapableAcrossDomains, portIndex=%d\n",
 		       __func__, sm->portIndex);
 	}
@@ -253,6 +278,7 @@ static void *reset_proc(md_pdelay_req_data_t *sm)
 			sm->mdeg->forAllDomain->isMeasuringDelay = false;
 			sm->mdeg->forAllDomain->asCapableAcrossDomains = false;
 			sm->thisSM->neighborRateRatioValid=false;
+			sm->ppg->forAllDomain->neighborRateRatio = 1;
 		}
 	}
 

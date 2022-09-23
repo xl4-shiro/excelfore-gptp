@@ -18,9 +18,9 @@
 # along with Excelfore-gptp.  If not, see
 # <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>.
 #
-PACKAGENAME=xl4gptp
-VERSION=1.2.0
-DESCRIPTION=Excelfore gptp daemon and libary
+PACKAGENAME=@PACKAGE_NAME@
+VERSION=@PACKAGE_VERSION@
+DESCRIPTION=@PACKAGE_DESC@
 
 ACLOCAL_AMFLAGS = -I m4
 AM_LDFLAGS =
@@ -30,15 +30,19 @@ AM_CFLAGS = -Wall -Wextra -Wno-unused-parameter -include gptp_private.h \
 if BUILD_IN_STPL
 AM_CFLAGS += -I$(srcdir)/..
 AM_LDFLAGS += -L../xl4unibase/.libs -L../xl4combase/.libs
+GPTP2_LDADD = -lx4unibase -lx4combase
 UB_GENCONF = $(srcdir)/../xl4unibase/ub_genconf.py
 DOC_DIR = $(abs_srcdir)/../xl4unibase/doc
 else # BUILD_IN_STPL
 UB_GENCONF = $(STAGING_DIR_HOST)$(datadir)/xl4unibase/ub_genconf.py
 DOC_DIR = $(STAGING_DIR_HOST)$(datadir)/xl4unibase
+GPTP2_LDADD = $(x4combase_LIBS) $(x4unibase_LIBS)
 endif # BUILD_IN_STPL
 
 pkgincludedir=$(includedir)/xl4tsn/gptp2
 docdir=${datarootdir}/doc/xl4tsn/gptp2
+
+pkgconfig_DATA=$(PACKAGENAME).pc
 
 AM_CFLAGS += -D_GNU_SOURCE
 
@@ -80,7 +84,6 @@ GPTP2_SOURCES = ll_gptpsupport.h \
 bin_PROGRAMS = gptp2d set_ptpclock gptpipcmon
 check_PROGRAMS = gptpcommon_unittest
 TESTS = gptpcommon_unittest
-GPTP2_LDADD = -lx4unibase -lx4combase
 
 dist_bin_SCRIPTS = gptpipc_extscript
 GPTP2_SOURCES += posix/ix_ll_gptpsupport.c
@@ -95,9 +98,24 @@ if BUILD_IN_STPL
 endif # end of EKF_ARMADA && BUILD_IN_STPL
   GPTP2_LDADD += -lpfutils -lsmi -ldevmem
 else # default platform
+if TI_DP83867A
+  AM_CFLAGS += -I$(srcdir)/dp83867a -I$(srcdir)/dp83867a/tda4vm
+  GPTP2_SOURCES += dp83867a/transfer_time.c dp83867a/tda4vm/timer_master.c \
+	dp83867a/memmap.c dp83867a/tda4vm/device_config.c \
+	dp83867a/shmem.c dp83867a/ptpdevclock.c \
+	dp83867a/tda4vm/timer_slave.c dp83867a/gptpnet.c dp83867a/timer_share.c \
+	posix/ix_gptpclock.c
+  libx4gptp2_la_SOURCES = gptpmasterclock.c gptpmasterclock.h \
+	gptpipc.c gptpipc.h dp83867a/ptpdevclock.c dp83867a/shmem.c \
+	dp83867a/tda4vm/device_config.c \
+	dp83867a/memmap.c dp83867a/tda4vm/timer_slave.c dp83867a/timer_share.c
+  libx4gptp2_la_LIBADD = $(GPTP2_LDADD)
+else
   AM_CFLAGS += -DPTP_VIRTUAL_CLOCK_SUPPORT
-  GPTP2_SOURCES += posix/ix_gptpnet.c posix/ix_gptpclock.c posix/ix_ptpdevclock.c \
-      gptpclock_virtual.c gptpclock_virtual.h
+  GPTP2_SOURCES += posix/ix_gptpnet.c posix/ix_netlinkif.c posix/ix_netlinkif.h \
+	posix/ix_timestamp.c posix/ix_timestamp.h \
+	posix/ix_gptpclock.c posix/ix_ptpdevclock.c \
+	gptpclock_virtual.c gptpclock_virtual.h
 
   check_PROGRAMS += freqadj_unittest ix_gptpclock_unittest ix_gptpnet_unittest \
       gptpmasterclock_response md_abnormal_hooks_unittest
@@ -140,6 +158,7 @@ if HAVE_SYSIO
   gptp_sync_pout_LDADD =  libx4gptp2.la $(GPTP2_LDADD)
 endif
 
+endif # end of NOT TI_DP83867A
 endif # end of default platform
 
 gptp2d_SOURCES = gptp2d.c $(GPTP2_SOURCES)
@@ -215,10 +234,10 @@ $(srcdir)/xl4_header.tex:
 $(TARGET_PDF): $(DOC_LATEC_REFMAN)
 	$(INSTALL_DATA) $^ $@
 
-$(DOC_LATEC_REFMAN): $(srcdir)/xl4_header.tex $(DOC_HTML_INDEX)
+$(DOC_LATEC_REFMAN): $(DOC_HTML_INDEX)
 	make -C $(srcdir)/docoutput/latex
 
-$(srcdir)/docoutput/html $(DOC_HTML_INDEX): $(pkginclude_HEADERS) README.md xl4gptp_doxygen.conf
+$(srcdir)/docoutput/html $(DOC_HTML_INDEX): $(srcdir)/xl4_header.tex $(pkginclude_HEADERS) README.md xl4gptp_doxygen.conf
 	cd $(srcdir); PROJECT_NAME=$(PACKAGENAME) PROJECT_VERSION=$(VERSION)-`date +%Y%m%d` \
 	DOXYGEN_INPUT="$(pkginclude_HEADERS) README.md" doxygen $(PACKAGENAME)_doxygen.conf
 

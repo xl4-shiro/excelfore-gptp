@@ -743,7 +743,7 @@ static int gptpnet_catch_event(gptpnet_data_t *gpnet)
 	gptpnet_proc_deferred_txts(gpnet, &ts64);
 
 	FD_ZERO(&rfds);
-	if(gpnet->portfd) FD_SET(gpnet->portfd, &rfds);
+	if(CB_SOCKET_VALID(gpnet->portfd)) FD_SET(gpnet->portfd, &rfds);
 	maxfd=UB_MAX(maxfd, gpnet->portfd);
 	if(ipcfd){
 		FD_SET(ipcfd, &rfds);
@@ -974,7 +974,7 @@ int gptpnet_close(gptpnet_data_t *gpnet)
 	int i;
 	UB_LOG(UBL_DEBUGV, "%s:\n",__func__);
 	if(!gpnet) return -1;
-	if(gpnet->portfd) close(gpnet->portfd);
+	if(CB_SOCKET_VALID(gpnet->portfd)) close(gpnet->portfd);
 	ub_esarray_close(gpnet->txts_events);
 	for(i=0;i<DEFAULT_SJA1105_NUM_CASC;i++){
 		if(gpnet->spifd[i]) spiClose(gpnet->spifd[i]);

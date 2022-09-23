@@ -101,7 +101,7 @@ int gptpclock_rate_same(int clockIndex, uint8_t domainNumber,
 int gptpclock_setoffset64(int64_t ts64, int clockIndex, uint8_t domainNumber);
 int gptpclock_active_domain_switch(int domainIndex);
 int gptpclock_active_domain_status(void);
-int gptpclock_set_gmsync(int clockIndex, uint8_t domainNumber, bool becomeGM);
+int gptpclock_set_gmsync(int clockIndex, uint8_t domainNumber, ClockIdentity gmIdentity, bool becomeGM);
 int gptpclock_get_gmsync(int clockIndex, uint8_t domainNumber);
 bool gptpclock_we_are_gm(int domainIndex);
 int gptpclock_reset_gmsync(int clockIndex, uint8_t domainNumber);

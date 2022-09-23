@@ -130,7 +130,7 @@ static int portStateUpdate(port_state_selection_data_t *sm,
 		}
 	}
 	if((*selected_state==SlavePort) && (oldState!=SlavePort)){
-		// ??? transition from no port is SlavePort to this port as SlavePort must
+		// ??? transition from none SlavePort to this port as SlavePort must
 		// update the global pathTrace
 		N = bppgl->annPathSequenceCount < MAX_PATH_TRACE_N ?
 			bppgl->annPathSequenceCount : MAX_PATH_TRACE_N;
@@ -301,7 +301,7 @@ static void *updtStatesTree(port_state_selection_data_t *sm, int64_t cts64)
 			   which means the master clock is synced status.
 			   if init_slave_ts is set, defer gptpclock_set_gmsync */
 			if(!sm->deferred_gmsync)
-				gptpclock_set_gmsync(0, sm->ptasg->domainNumber, true);
+				gptpclock_set_gmsync(0, sm->ptasg->domainNumber, sm->ptasg->thisClock, true);
 		}else{
 			gptpclock_reset_gmsync(0, sm->ptasg->domainNumber);
 		}
@@ -328,7 +328,7 @@ static void *proc_init_slave(port_state_selection_data_t *sm, int64_t cts64)
 		       "Domain0-priority1 returns to the configured value\n",__func__);
 		if(SELECTED_STATE[0] == SlavePort){
 			// this is GM, call the deferred process
-			gptpclock_set_gmsync(0, sm->ptasg->domainNumber, true);
+			gptpclock_set_gmsync(0, sm->ptasg->domainNumber, sm->ptasg->thisClock, true);
 		}
 		goto clearexit;
 	} else {
@@ -353,7 +353,7 @@ static void *proc_deferred_gmsync(port_state_selection_data_t *sm, int64_t cts64
 	if(gptpclock_get_gmstable(0)){
 		if(SELECTED_STATE[0] == SlavePort){
 			// this is GM on dominaIndex > 0
-			gptpclock_set_gmsync(0, sm->ptasg->domainNumber, true);
+			gptpclock_set_gmsync(0, sm->ptasg->domainNumber, sm->ptasg->thisClock, true);
 		}
 		sm->deferred_gmsync=false;
 	}
@@ -383,7 +383,7 @@ static void *init_bridge_proc(port_state_selection_data_t *sm, int64_t cts64)
 		}
 		sm->ptasg->gmPresent = true;
 		if(static_slave==0)
-			gptpclock_set_gmsync(0, sm->ptasg->domainNumber, true);
+			gptpclock_set_gmsync(0, sm->ptasg->domainNumber, sm->ptasg->thisClock, true);
 		return NULL;
 	}
 	updateStateDisabledTree(sm);

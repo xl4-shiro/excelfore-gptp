@@ -74,15 +74,24 @@ rate_move_test()
 	exit -1
     fi
 
+    s0=`date +%s`
+    n0=`date +%N | sed 's/^0*//'`
     v1=`./gptpclock_monitor -s /gptp_mc_shm1 -o | sed -rn "s/.* ([^ ]*)$/\1/p"`
     sleep ${duration}
     v2=`./gptpclock_monitor -s /gptp_mc_shm1 -o | sed -rn "s/.* ([^ ]*)$/\1/p"`
-    let rv=${v2}-${v1}
-    let maxv=${duration}*$ppb+100000*${duration}
-    let minv=${duration}*$ppb-100000*${duration}
-    let rrate=${rv}/${duration}
+    s1=`date +%s`
+    n1=`date +%N | sed 's/^0*//'`
+    if [ ${n1} -lt ${n0} ]; then
+	n1=$((${n1}+1000000000))
+	s1=$((${s1}-1))
+    fi
+    du=$(((${s1}-${s0})*1000000+(${n1}-${n0})/1000))
+    rv=$((${v2}-${v1}))
+    maxv=$((${du}*$ppb/1000000+${du}/10))
+    minv=$((${du}*$ppb/1000000-${du}/10))
+    rrate=$((${rv}*1000000/${du}))
     if [ ${rv} -gt ${maxv} -o ${rv} -lt ${minv} ]; then
-	echo "the clock moved ${rv} nsec in ${duration} sec, rate is ${rrate} ppb, looks bad"
+	echo "the clock moved ${rv} nsec in ${du} usec, rate is ${rrate} ppb, looks bad"
 	stop_gptp2d
 	exit -1
     fi
@@ -124,20 +133,31 @@ multi_port_test()
     echo "PASS: multi ports SYNCed"
 
     for i in {1,3,5,7,9}; do
-	va[${i}]=`./gptpclock_monitor -s /gptp_mc_shm1 -o | sed -rn "s/.* ([^ ]*)$/\1/p"`
+	s0[${i}]=`date +%s`
+	n0[${i}]=`date +%N | sed 's/^0*//'`
+	va[${i}]=`./gptpclock_monitor -s /gptp_mc_shm${i} -o | sed -rn "s/.* ([^ ]*)$/\1/p"`
     done
     let duration=3
     sleep ${duration}
     for i in {1,3,5,7,9}; do
-	vb[${i}]=`./gptpclock_monitor -s /gptp_mc_shm1 -o | sed -rn "s/.* ([^ ]*)$/\1/p"`
-	let rv[${i}]=${vb[${i}]}-${va[${i}]}
-	let rrate[${i}]=${rv[${i}]}/${duration}
+	vb[${i}]=`./gptpclock_monitor -s /gptp_mc_shm${i} -o | sed -rn "s/.* ([^ ]*)$/\1/p"`
+	s1[${i}]=`date +%s`
+	n1[${i}]=`date +%N | sed 's/^0*//'`
+	rv[${i}]=$((${vb[${i}]}-${va[${i}]}))
     done
-    let maxv=${duration}*$ppb+100000*${duration}
-    let minv=${duration}*$ppb-100000*${duration}
     for i in {1,3,5,7,9}; do
-	if [ ${rv[${i}]} -gt ${maxv} -o ${rv[${i}]} -lt ${minv} ]; then
-	    echo "the clock moved ${rv[${i}]} nsec in ${duration} sec, "\
+	if [ ${n1[${i}]} -lt ${n0[${i}]} ]; then
+	    n1[${i}]=$((${n1[${i}]}+1000000000))
+	    s1[${i}]=$((${s1[${i}]}-1))
+	fi
+	du[${i}]=$(((${s1[${i}]}-${s0[${i}]})*1000000+(${n1[${i}]}-${n0[${i}]})/1000))
+	rrate[${i}]=$((${rv[${i}]}*1000000/${du[${i}]}))
+	maxv[${i}]=$((${du[${i}]}*$ppb/1000000+${du[${i}]}/10))
+	minv[${i}]=$((${du[${i}]}*$ppb/1000000-${du[${i}]}/10))
+    done
+    for i in {1,3,5,7,9}; do
+	if [ ${rv[${i}]} -gt ${maxv[${i}]} -o ${rv[${i}]} -lt ${minv[${i}]} ]; then
+	    echo "the clock moved ${rv[${i}]} nsec in ${du[${i}]} usec, "\
 		 "rate is ${rrate[${i}]} ppb, looks bad"
 	    multi_port_close
 	    exit -1
@@ -189,21 +209,21 @@ multi_domain_test()
 	    multi_domain_close
 	    exit -1
 	fi
-	v1=`cat gptpipcmon${up}.log | sed -rn "s/.*lastGmFreqChange=([0-9.]*)/\1/p"`
+	v1=`cat gptpipcmon${up}.log | sed -rn "s/.*adjfreq=([-0-9.]*)ppb.*/\1/p"`
 	set $v1
 	v=0
 	case $i in
 	    0)
-		v=`echo "$4 > -0.0006 && $4 < -0.0004" | bc`
+		v=`echo "$4 > -600000 && $4 < -400000" | bc`
 		;;
 	    1)
-		v=`echo "$2 > 0.0004 && $2 < 0.0006" | bc`
+		v=`echo "$2 > 400000 && $2 < 600000" | bc`
 		;;
 	    3)
-		v=`echo "$2 > 0.0004 && $2 < 0.0006 && $4 > -0.0001 && $4 < 0.0001" | bc`
+		v=`echo "$2 > 400000 && $2 < 600000 && $4 > -100000 && $4 < 100000" | bc`
 		;;
 	esac
-	if [ $v != 1 ]; then
+	if [ "$v" != 1 ]; then
 	    echo "gptpipcmon${up}.log looks bad"
 	    multi_domain_close
 	    exit -1

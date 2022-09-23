@@ -49,3 +49,4 @@ gh_gptpmasterclock.h
 .misra.json
 make_cppcheck.mk
 tags
+*.pc

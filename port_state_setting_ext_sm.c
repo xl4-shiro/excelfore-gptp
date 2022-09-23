@@ -94,6 +94,10 @@ void updtPortState(port_state_setting_ext_data_t *sm)
 
 		if(sm->messagePriority.rootSystemIdentity.priority1 < 255){
 			sm->ptasg->gmPresent = true;
+
+			memcpy(sm->ptasg->gmIdentity,
+					sm->bppgl[sm->portIndex]->masterPriority.rootSystemIdentity.clockIdentity,
+					sizeof(ClockIdentity));
 		}else{
 			sm->ptasg->gmPresent = false;
 		}
@@ -113,6 +117,11 @@ void updtPortState(port_state_setting_ext_data_t *sm)
 
 		if(sm->bptasg->systemPriority.rootSystemIdentity.priority1 < 255){
 			sm->ptasg->gmPresent = true;
+
+			memcpy(sm->ptasg->gmIdentity,
+					sm->bptasg->systemPriority.rootSystemIdentity.clockIdentity,
+					sizeof(ClockIdentity));
+
 		}else{
 			sm->ptasg->gmPresent = false;
 		}

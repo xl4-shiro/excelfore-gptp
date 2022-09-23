@@ -57,6 +57,7 @@ typedef struct MDSyncReceive {
 	uint16_t gmTimeBaseIndicator;
 	ScaledNs lastGmPhaseChange;
 	double lastGmFreqChange;
+	uint16_t seqid;
 } MDSyncReceive;
 
 // 10.2.2.3 PortSyncSync
@@ -77,6 +78,7 @@ typedef struct PortSyncSync {
 	int16_t localPortIndex;
 	// Next send time relative to current time
 	UScaledNs syncNextSendTimeoutTime;
+	uint16_t lastSyncSeqID;
 	PerPortGlobal *local_ppg; // per-port-global for the localPort
 } PortSyncSync;
 
@@ -111,6 +113,8 @@ typedef struct PerTimeAwareSystemGlobal {
 	int8_t clockMasterLogSyncInterval;
 	bool gm_stable_initdone;
 	bool asCapableOrAll;
+	uint16_t lastSyncSeqID;
+	ClockIdentity gmIdentity;
 	// Flag to determine if AVNU is followed over 802.1AS
 	bool conformToAvnu;
 } PerTimeAwareSystemGlobal;

@@ -21,12 +21,11 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <stdio.h>
-#include <linux/rtnetlink.h>
-#include <sys/un.h>
 #include "gptpnet.h"
 #include "gptpclock.h"
 #include "xl4combase/cb_ethernet.h"
-
+#include "ix_netlinkif.h"
+#include "ix_timestamp.h"
 
 #define GPTPNET_FRAME_SIZE (GPTP_MAX_PACKET_SIZE+sizeof(CB_ETHHDR_T))
 
@@ -57,33 +56,11 @@ struct gptpnet_data {
 	void *cb_data;
 	int num_netdevs;
 	netdevice_t *netdevices;
-	int netlinkfd;
+	ix_netlinkif_t *nlkd;
 	int64_t event_ts64;
 	cb_ipcserverd_t *ipcsd;
 	int64_t next_tout64;
 };
-
-static int netlink_init(int *fd)
-{
-	struct sockaddr_nl sa;
-	*fd = CB_SOCKET(AF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
-	if (*fd<0) {
-		UB_LOG(UBL_ERROR,"%s:can't open, %s\n", __func__, strerror(errno));
-		*fd=0;
-		return -1;
-	}
-	memset(&sa, 0, sizeof(sa));
-	sa.nl_family = AF_NETLINK;
-	sa.nl_groups = RTMGRP_LINK;
-	sa.nl_pid = getpid();
-	if (bind(*fd, (struct sockaddr *)&sa, sizeof(sa))<0) {
-		UB_LOG(UBL_ERROR,"%s:can't bind, %s\n", __func__, strerror(errno));
-		close(*fd);
-		*fd=0;
-		return -1;
-	}
-	return 0;
-}
 
 static int onenet_init(netdevice_t *ndev, char *netdev)
 {
@@ -105,7 +82,7 @@ static int onenet_init(netdevice_t *ndev, char *netdev)
 	llrawp.dev=ndev->nlstatus.devname;
 	llrawp.proto=ETH_P_1588;
 	llrawp.vlan_proto=0;
-	llrawp.priority=0;
+	llrawp.priority= gptpconf_get_intitem(CONF_SOCKET_TXPRIORITY);
 	llrawp.rw_type=CB_RAWSOCK_RDWR;
 	if(ndev->ovip_port){
 		memset(&ovipp, 0, sizeof(ovipp));
@@ -129,7 +106,7 @@ static int onenet_init(netdevice_t *ndev, char *netdev)
 	return res;
 erexit:
 	close(ndev->fd);
-	ndev->fd = 0;
+	ndev->fd = CB_SOCKET_INVALID_VALUE;
 	return -1;
 }
 
@@ -151,140 +128,6 @@ static int onenet_activate(gptpnet_data_t *gpnet, int ndevIndex)
 	if(!gpnet->cb_func || !ndev->nlstatus.up) return 0;
 	return gpnet->cb_func(gpnet->cb_data, ndevIndex+1, GPTPNET_EVENT_DEVUP,
 			      &gpnet->event_ts64, &ndev->nlstatus);
-}
-
-static int find_netdev(netdevice_t *devices, int dnum, char *netdev)
-{
-	int i;
-	for(i=0;i<dnum;i++){
-		if(!strcmp(netdev, devices[i].nlstatus.devname)) return i;
-	}
-	return -1;
-}
-
-static int netlink_msg_handler(gptpnet_data_t *gpnet, struct nlmsghdr *msg)
-{
-	struct ifaddrmsg *ifa=NLMSG_DATA(msg);
-	char ifname[IFNAMSIZ];
-	gptpnet_event_t event=0;
-	int ndevIndex;
-	struct ifinfomsg *ifi;
-	event_data_netlink_t edtnl;
-	uint32_t linkstate;
-	uint32_t speed;
-	uint32_t duplex;
-
-	if_indextoname(ifa->ifa_index,ifname);
-	UB_LOG(UBL_INFO, "%s:netlink msg_type=%d on %s\n",__func__, msg->nlmsg_type, ifname);
-
-	if(!gpnet->cb_func) return -1;
-	if(msg->nlmsg_type != RTM_NEWLINK) return 0;
-        ifi = NLMSG_DATA (msg);
-	ndevIndex=find_netdev(gpnet->netdevices, gpnet->num_netdevs, ifname);
-	if(ndevIndex<0) return 0;
-	memcpy(&edtnl, &gpnet->netdevices[ndevIndex].nlstatus, sizeof(event_data_netlink_t));
-	if(!(ifi->ifi_flags & IFF_RUNNING)){
-		event=GPTPNET_EVENT_DEVDOWN;
-		edtnl.up=false;
-	}else{
-		cb_get_ethtool_linkstate(gpnet->netdevices[ndevIndex].fd,
-				gpnet->netdevices[ndevIndex].nlstatus.devname,
-				&linkstate);
-		edtnl.up=linkstate?true:false;
-		if(edtnl.up){
-			cb_get_ethtool_info(gpnet->netdevices[ndevIndex].fd,
-					gpnet->netdevices[ndevIndex].nlstatus.devname,
-					&speed, &duplex);
-			edtnl.speed=speed;
-			edtnl.duplex=duplex;
-			event=GPTPNET_EVENT_DEVUP;
-		}else{
-			event=GPTPNET_EVENT_DEVDOWN;
-		}
-	}
-	if(!memcmp(&edtnl, &gpnet->netdevices[ndevIndex].nlstatus, sizeof(event_data_netlink_t)))
-		return 0; // status no change
-	memcpy(&gpnet->netdevices[ndevIndex].nlstatus, &edtnl, sizeof(event_data_netlink_t));
-	return gpnet->cb_func(gpnet->cb_data, ndevIndex+1, event, &gpnet->event_ts64, &edtnl);
-}
-
-static int read_netlink_event(gptpnet_data_t *gpnet)
-{
-	int res;
-	int ret = 0;
-	char buf[4096];
-	struct iovec iov = { buf, sizeof buf };
-	struct sockaddr_nl snl;
-	struct msghdr msg = { (void*)&snl, sizeof snl, &iov, 1, NULL, 0, 0};
-	struct nlmsghdr *h;
-
-	res = recvmsg(gpnet->netlinkfd, &msg, 0);
-	if(res < 0) {
-		if (errno == EWOULDBLOCK || errno == EAGAIN) {
-			UB_LOG(UBL_INFO, "%s:non blocking?\n",__func__);
-			return ret;
-		}
-		UB_LOG(UBL_ERROR,"%s:error in recvmsg, %s\n", __func__, strerror(errno));
-		return -1;
-	}
-
-	for(h = (struct nlmsghdr *) buf; NLMSG_OK (h, (unsigned int)res);
-	    h = NLMSG_NEXT (h, res)) {
-		if (h->nlmsg_type == NLMSG_DONE)
-			return ret;
-
-		if (h->nlmsg_type == NLMSG_ERROR) {
-			UB_LOG(UBL_ERROR,"%s: Message is an error - decode TBD\n",__func__);
-			return -1;
-		}
-
-		ret = netlink_msg_handler(gpnet, h);
-		if(ret < 0) return ret;
-	}
-	return ret;
-}
-
-static int read_txts(gptpnet_data_t *gpnet, int dvi, struct msghdr *msg, int len)
-{
-	netdevice_t *ndev;
-	uint8_t *buf=msg->msg_iov[0].iov_base;
-	event_data_txts_t edtxts;
-
-	// once the TxTS is captured, the guard time is not needed
-	gpnet->netdevices[dvi].guard_time=0;
-
-	memset(&edtxts, 0, sizeof(edtxts));
-	if(len < 48) {
-		UB_LOG(UBL_ERROR,"%s:deviceIndex=%d, recvmsg returned only %d bytes\n",
-		       __func__, dvi, len);
-		return -1;
-	}
-	if(gpnet->netdevices[dvi].ovip_port) buf+=ETH_HLEN+20+8;
-	if(ntohs(*(uint16_t *)(buf + 12))!=ETH_P_1588){
-		UB_LOG(UBL_DEBUG,
-		       "%s:deviceIndex=%d, not ETH_P_1588 packet 0x%02X%02X\n",
-		       __func__, dvi, buf[12], buf[13]);
-		return -1;
-	}
-
-	edtxts.msgtype=PTP_HEAD_MSGTYPE(buf+ETH_HLEN);
-	edtxts.seqid=PTP_HEAD_SEQID(buf+ETH_HLEN);
-	edtxts.domain=PTP_HEAD_DOMAIN_NUMBER(buf+ETH_HLEN);
-	if(edtxts.msgtype >= 8){
-		UB_LOG(UBL_DEBUG,"deviceIndex=%d, msgtype:%d is not Event, ignore this\n",
-		       dvi, edtxts.msgtype);
-		return -1;
-	}
-
-	if(ll_txmsg_timestamp(msg, &edtxts.ts64)) return -1;
-	if(gpnet->netdevices[dvi].ovip_port && edtxts.msgtype==0)
-		edtxts.ts64+=gptpclock_d0ClockfromRT(dvi+1);
-	if(!gpnet->cb_func) return -1;
-	ndev=&gpnet->netdevices[dvi];
-	ndev->waiting_txts=false;
-	gpnet->cb_func(gpnet->cb_data, dvi+1, GPTPNET_EVENT_TXTS,
-		       &gpnet->event_ts64, &edtxts);
-	return 0;
 }
 
 static int read_recdata(gptpnet_data_t *gpnet, int dvi, struct msghdr *msg, int len)
@@ -326,7 +169,9 @@ static int read_netdev_event(gptpnet_data_t *gpnet, int dvi)
 	unsigned char buf[GPTPNET_FRAME_SIZE];
 	int res;
 	netdevice_t *ndev=&gpnet->netdevices[dvi];
+	event_data_txts_t edtxts;
 
+	memset(&edtxts, 0, sizeof(event_data_txts_t));
 	vec[0].iov_base = buf;
 	vec[0].iov_len = sizeof(buf);
 	memset(&msg, 0, sizeof(msg));
@@ -335,20 +180,22 @@ static int read_netdev_event(gptpnet_data_t *gpnet, int dvi)
 	msg.msg_control = control;
 	msg.msg_controllen = sizeof(control);
 
-	res = recvmsg(ndev->fd, &msg, MSG_ERRQUEUE | MSG_DONTWAIT);
-	if(res > 0){
-		return read_txts(gpnet, dvi, &msg, res);
-	}else if(res == 0){
-		UB_LOG(UBL_ERROR,"%s:deviceIndex=%d, recvmsg for EQ returned 0\n",
-		       __func__, dvi);
-		return -1;
-	}else if(errno!=EAGAIN ) {
-		UB_LOG(UBL_ERROR,"%s:deviceIndex=%d, recvmsg for EQ failed: %s\n",
-		       __func__, dvi, strerror(errno));
-		return -1;
+	res = ix_timestamp_txts(ndev->fd, &msg, dvi, gpnet->netdevices[dvi].ovip_port,
+				&edtxts);
+	if(res==-2) return -1;
+	// edtxts.ts64==-1 means, 'msg' data has been already read
+	if(edtxts.ts64!=-1 && res<=0){
+		//once the TxTS is captured, the guard time is not needed
+		gpnet->netdevices[dvi].guard_time=0;
+		if(res!=0) return res;
+		if(!gpnet->cb_func) return -1;
+		ndev=&gpnet->netdevices[dvi];
+		ndev->waiting_txts=false;
+		gpnet->cb_func(gpnet->cb_data, dvi+1, GPTPNET_EVENT_TXTS,
+			       &gpnet->event_ts64, &edtxts);
+		return res;
 	}
-
-	res = recvmsg(ndev->fd, &msg, MSG_DONTWAIT);
+	if(edtxts.ts64!=-1) res = recvmsg(ndev->fd, &msg, MSG_DONTWAIT);
 	if (res > 0){
 		if(!ndev->nlstatus.up &&
 		   strstr(ndev->nlstatus.devname,
@@ -394,17 +241,20 @@ static int gptpnet_catch_event(gptpnet_data_t *gpnet)
 	int i;
 	static int64_t last_ts64=0;
 	int ipcfd=cb_ipcsocket_getfd(gpnet->ipcsd);
+	int nlkfd;
 
 	FD_ZERO(&rfds);
 	for(i=0;i<gpnet->num_netdevs;i++){
-		if(gpnet->netdevices[i].fd) FD_SET(gpnet->netdevices[i].fd, &rfds);
+		if(CB_SOCKET_VALID(gpnet->netdevices[i].fd))
+			FD_SET(gpnet->netdevices[i].fd, &rfds);
 		maxfd=UB_MAX(maxfd, gpnet->netdevices[i].fd);
 	}
-	if(gpnet->netlinkfd){
-		FD_SET(gpnet->netlinkfd, &rfds);
-		maxfd=UB_MAX(maxfd, gpnet->netlinkfd);
+	nlkfd=ix_netlinkif_getfd(gpnet->nlkd);
+	if(CB_SOCKET_VALID(nlkfd)){
+		FD_SET(nlkfd, &rfds);
+		maxfd=UB_MAX(maxfd, nlkfd);
 	}
-	if(ipcfd){
+	if(CB_SOCKET_VALID(ipcfd)){
 		FD_SET(ipcfd, &rfds);
 		maxfd=UB_MAX(maxfd, ipcfd);
 	}
@@ -445,15 +295,16 @@ static int gptpnet_catch_event(gptpnet_data_t *gpnet)
 				     &gpnet->event_ts64, NULL);
 		return res;
 	}
-	if(FD_ISSET(gpnet->netlinkfd, &rfds)){
-		res|=read_netlink_event(gpnet);
+	if(CB_SOCKET_VALID(nlkfd) && FD_ISSET(nlkfd, &rfds)){
+		res|=ix_netlinkif_read_event(gpnet->nlkd, gpnet, &gpnet->event_ts64);
 	}
 	for(i=0;i<gpnet->num_netdevs;i++){
-		if(FD_ISSET(gpnet->netdevices[i].fd, &rfds)){
+		if(CB_SOCKET_VALID(gpnet->netdevices[i].fd) &&
+		   FD_ISSET(gpnet->netdevices[i].fd, &rfds)){
 			while(!read_netdev_event(gpnet, i)) ;
 		}
 	}
-	if(FD_ISSET(ipcfd, &rfds)){
+	if(CB_SOCKET_VALID(ipcfd) && FD_ISSET(ipcfd, &rfds)){
 		res|=cb_ipcsocket_server_read(gpnet->ipcsd, gpnet->ipc_cb, gpnet->cb_data);
 	}
 	return res;
@@ -556,7 +407,9 @@ int gptpnet_activate(gptpnet_data_t *gpnet)
 	for(i=0;i<gpnet->num_netdevs;i++){
 		onenet_activate(gpnet, i);
 	}
-	return netlink_init(&gpnet->netlinkfd);
+	gpnet->nlkd=ix_netlinkif_init(gpnet->cb_func, gpnet->cb_data);
+	if(!gpnet->nlkd) return -1;
+	return 0;
 }
 
 int gptpnet_close(gptpnet_data_t *gpnet)
@@ -566,11 +419,11 @@ int gptpnet_close(gptpnet_data_t *gpnet)
 	if(!gpnet) return -1;
 	if(gpnet->netdevices){
 		for(i=0;i<gpnet->num_netdevs;i++){
-			if(!gpnet->netdevices[i].fd) continue;
+			if(!CB_SOCKET_VALID(gpnet->netdevices[i].fd)) continue;
 			close(gpnet->netdevices[i].fd);
 		}
 	}
-	if(gpnet->netlinkfd) close(gpnet->netlinkfd);
+	ix_netlinkif_close(gpnet->nlkd);
 	cb_ipcsocket_server_close(gpnet->ipcsd);
 	free(gpnet->netdevices);
 	free(gpnet);
@@ -698,4 +551,27 @@ int gptpnet_tsn_schedule(gptpnet_data_t *gpnet, uint32_t aligntime, uint32_t cyc
 {
 	/* IEEE 802.1qbv (time-aware traffic shaping) not yet supported */
 	return 0;
+}
+
+/*
+ * functions to provide for ix_netlinkif.c
+ */
+static int find_netdev(netdevice_t *devices, int dnum, char *netdev)
+{
+	int i;
+	for(i=0;i<dnum;i++){
+		if(!strcmp(netdev, devices[i].nlstatus.devname)) return i;
+	}
+	return -1;
+}
+
+int gptpnet_getfd_nlstatus(gptpnet_data_t *gpnet, char *ifname,
+			   event_data_netlink_t **nlstatus, int *fd)
+{
+	int ndevIndex;
+	ndevIndex=find_netdev(gpnet->netdevices, gpnet->num_netdevs, ifname);
+	if(ndevIndex<0) return -1;
+        *nlstatus=&gpnet->netdevices[ndevIndex].nlstatus;
+	*fd=gpnet->netdevices[ndevIndex].fd;
+	return ndevIndex;
 }

@@ -67,6 +67,7 @@ static void setPSSyncPSSR(port_sync_sync_receive_data_t *sm, double rateRatio, u
 	sm->portSyncSync.gmTimeBaseIndicator = RCVD_MDSYNC_PTR->gmTimeBaseIndicator;
 	sm->portSyncSync.lastGmPhaseChange = RCVD_MDSYNC_PTR->lastGmPhaseChange;
 	sm->portSyncSync.lastGmFreqChange = RCVD_MDSYNC_PTR->lastGmFreqChange;
+	sm->portSyncSync.lastSyncSeqID = RCVD_MDSYNC_PTR->seqid;
 
 	/* calculate syncNextSendTimeoutTime
 	 * upstreamTxTime may be used as an alternative, but since allows certain

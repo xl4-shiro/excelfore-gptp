@@ -9,9 +9,9 @@
 #
 # Note: dependencies are not defined. Add in 'debian/control' if needed
 #
-PACKAGENAME=$(shell sed -rn "s/^PACKAGENAME *= *(\S+).*/\1/p" Makefile.am)
-VERSION=$(shell sed -rn "s/^VERSION *= *(\S+).*/\1/p" Makefile.am)
-DESCRIPTION=$(shell sed -rn "s/^DESCRIPTION *= *(.*)/\1/p" Makefile.am)
+PACKAGENAME=$(shell sed -n '/AC_INIT/p' configure.ac | awk -F"[][]" '{print $$2}')
+VERSION=$(shell sed -n '/AC_INIT/p' configure.ac | awk -F"[][]" '{print $$4}')
+DESCRIPTION=$(shell sed -n "s/^.*PACKAGE_DESC,//p" configure.ac | sed 's/.$$//')
 USERNAME=$(shell git config user.name)
 USEREMAIL=$(shell git config user.email)
 deb:
@@ -44,11 +44,11 @@ debian/rules:
 	@echo "%:" >> $@
 	@echo "	dh \$$@ --with autoreconf" >> $@
 	@echo "override_dh_auto_install:" >> $@
-	@echo "	make DESTDIR=\$$(PWD)/debian/$(PACKAGENAME) install-exec" >> $@
-	@echo "	make DESTDIR=\$$(PWD)/debian/$(PACKAGENAME)-dev install-data" >> $@
+	@echo "	make DESTDIR=\$$(CURDIR)/debian/$(PACKAGENAME) install-exec" >> $@
+	@echo "	make DESTDIR=\$$(CURDIR)/debian/$(PACKAGENAME)-dev install-data" >> $@
 	@echo "	if [ \"\$$(DEB_BUILD_GNU_TYPE)\" =  \"\$$(DEB_HOST_GNU_TYPE)\" ]; then \\" >> $@
-	@echo "		make DESTDIR=\$$(PWD)/debian/$(PACKAGENAME)-doc install-html;\\" >> $@
-	@echo "		make DESTDIR=\$$(PWD)/debian/$(PACKAGENAME)-doc install-pdf;\\" >> $@
+	@echo "		make DESTDIR=\$$(CURDIR)/debian/$(PACKAGENAME)-doc install-html;\\" >> $@
+	@echo "		make DESTDIR=\$$(CURDIR)/debian/$(PACKAGENAME)-doc install-pdf;\\" >> $@
 	@echo "	fi" >> $@
 
 debian/control:

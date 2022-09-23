@@ -96,7 +96,7 @@ int gptp_vclock_settime(PTPFD_TYPE ptpfd, uint64_t ts64);
 }
 /*----------------------------------------------------------*/
 
-#else //PTP_VIRTUAL_CLOCK_SUPPORT
+#else //!PTP_VIRTUAL_CLOCK_SUPPORT
 
 /*----------------------------------------------------------*/
 /* These macros are used by application that use libgptp2 */
@@ -111,7 +111,7 @@ int gptp_vclock_settime(PTPFD_TYPE ptpfd, uint64_t ts64);
 #define GPTP_CLOCK_SETTIME(fd,ts64) ptpdev_clock_settime(fd, (int64_t *)&(ts64))
 /*----------------------------------------------------------*/
 
-#endif //PTP_VIRTUAL_CLOCK_SUPPORT
+#endif //!PTP_VIRTUAL_CLOCK_SUPPORT
 
 /**
  * @brief enables H/W Timestamping for socket

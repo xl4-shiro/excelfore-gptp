@@ -45,7 +45,7 @@ static int event_by_rate(event_data_t *event)
 	float v;
 
 	if(event->evd.eventrate<1.0){
-		v=(float)random()/(float)RAND_MAX;
+		v=(float)rand()/(float)RAND_MAX;
 		if(v>event->evd.eventrate) return 0;
 	}
 	return 1;

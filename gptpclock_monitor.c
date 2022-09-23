@@ -111,7 +111,7 @@ static int get_dc_diff(int64_t *dts64)
 
 int main_loop(void)
 {
-	int64_t ts64, rts64;
+	int64_t ts64=0, rts64=0;
 	int64_t *dts64a, *dts64b;
 	int *invalid_domain;
 	int adi, last_adi;
@@ -163,7 +163,7 @@ int main_loop(void)
 					break;
 				}
 			}
-			if(labs(dts64b[i+1]-dts64a[i+1])>(UB_SEC_NS/1000)){
+			if(llabs(dts64b[i+1]-dts64a[i+1])>(UB_SEC_NS/1000)){
 				jump=true;
 				printf("big jump(%"PRIi64"nsec) happned, domain=%d\n",
 				       dts64b[i+1]-dts64a[i+1], i);

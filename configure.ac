@@ -2,7 +2,9 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.65])
-AC_INIT([xl4gptp], [1.0], [shiro@excelfore.com])
+AC_INIT([xl4gptp], [1.2.3], [shiro@excelfore.com])
+AC_SUBST(PACKAGE_DESC,"Excelfore gptp daemon and libary")
+
 AM_INIT_AUTOMAKE([-Wall -Werror subdir-objects])
 AM_PROG_AR
 LT_PREREQ([2.2])
@@ -10,11 +12,14 @@ LT_INIT([static])
 AC_CONFIG_SRCDIR([gptpbasetypes.h])
 
 # Checks for programs.
-PKG_PROG_PKG_CONFIG
 AC_PROG_CC
 AC_PROG_INSTALL
 AM_PROG_CC_C_O
 AC_PROG_CC_C99
+
+# pkg-config dependency
+PKG_PROG_PKG_CONFIG
+PKG_INSTALLDIR
 
 # Check if posix platform
 AC_CHECK_HEADERS([pthread.h],
@@ -40,8 +45,16 @@ AC_ARG_ENABLE([ekf_armada],
 	AS_HELP_STRING([--enable-ekf-armada],[enable EKF ARMADA board variation]))
 AC_ARG_ENABLE([understpl],
 	AS_HELP_STRING([--enable-understpl],[enable understpl mode build]))
+AC_ARG_ENABLE([ti-dp83867a],
+	AS_HELP_STRING([--enable-ti-dp83867a],[enable TI DP83867A PHY PTP]))
 
 # Checks for libraries.
+PKG_CHECK_MODULES([x4unibase],[xl4unibase],,
+	[AC_CHECK_HEADERS([xl4unibase/unibase.h])]
+)
+PKG_CHECK_MODULES([x4combase],[xl4combase],,
+	[AC_CHECK_HEADERS([xl4combase/combase.h])]
+)
 
 # Checks for header files.
 AC_CHECK_HEADERS([stdio.h stdlib.h string.h xl4unibase/unibase.h xl4combase/combase.h])
@@ -66,6 +79,8 @@ AM_CONDITIONAL(SJA1105_LINUX, [test "x$enable_sja1105_linux" = "xyes"])
 # Supported platforms: EKF AC370/AL900
 AM_CONDITIONAL(EKF_ARMADA, [test x"$enable_ekf_armada" = "xyes"])
 
+AM_CONDITIONAL(TI_DP83867A, [test x"$enable_ti_dp83867a" = "xyes"])
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_CHECK_HEADER_STDBOOL
 AC_C_INLINE
@@ -79,6 +94,8 @@ AC_CHECK_FUNC([memset], [], [AC_MSG_ERROR([memset() function not found.])])
 AC_CHECK_FUNC([strtol], [], [AC_MSG_ERROR([strtol() function not found.])])
 
 AC_CONFIG_MACRO_DIR([m4])
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([
+	Makefile
+	xl4gptp.pc])
 
 AC_OUTPUT

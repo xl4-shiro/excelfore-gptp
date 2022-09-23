@@ -54,6 +54,7 @@
 #include "gm_stable_sm.h"
 #include "gptpman.h"
 #include "md_abnormal_hooks.h"
+#include "xl4unibase/unibase_macros.h"
 
 extern char *PTPMsgType_debug[];
 extern char *gptpnet_event_debug[];
@@ -562,6 +563,10 @@ static int ipc_respond_one_clock(gptpnet_data_t *gpnetd,
 		memcpy(&pd.u.clockd.lastGmFreqChangePk, &tasglb->clockSourceLastGmFreqChange,
 		       sizeof(double));
 		pd.u.clockd.lastGmPhaseChange_nsec=tasglb->clockSourceLastGmPhaseChange.nsec;
+		pd.u.clockd.lastSyncSeqID=tasglb->lastSyncSeqID;
+		pd.u.clockd.lastSyncReceiptTime_nsec=tasglb->syncReceiptTime.seconds.lsb*UB_SEC_NS
+		                                      +tasglb->syncReceiptTime.fractionalNanoseconds.msb;
+		pd.u.clockd.lastSyncReceiptLocalTime_nsec=tasglb->syncReceiptLocalTime.nsec;
 	}
 	gptpnet_ipc_respond(gpnetd, addr, &pd, sizeof(pd));
 	return 0;
@@ -570,7 +575,6 @@ static int ipc_respond_one_clock(gptpnet_data_t *gpnetd,
 static int ipc_respond_one_gport(gptpnet_data_t *gpnetd,
 				 PerPortGlobal *ppglb, BmcsPerPortGlobal *bppglb,
 				 PerTimeAwareSystemGlobal *tasglb,
-				 BmcsPerTimeAwareSystemGlobal *btasglb,
 				 int portIndex, int domainNumber, int domainIndex,
 				 struct sockaddr *addr)
 {
@@ -583,8 +587,9 @@ static int ipc_respond_one_gport(gptpnet_data_t *gpnetd,
 	pd.u.gportd.portOper=ppglb->forAllDomain->portOper;
 	pd.u.gportd.selectedState=tasglb->selectedState[portIndex];
 	pd.u.gportd.gmStable=gptpclock_get_gmstable(domainIndex);
-	memcpy(&pd.u.gportd.gmClockId, btasglb->gmPriority.rootSystemIdentity.clockIdentity,
-	       sizeof(ClockIdentity));
+	pd.u.gportd.pDelay=ppglb->forAllDomain->neighborPropDelay.nsec;
+	pd.u.gportd.pDelayRateRatio=ppglb->forAllDomain->neighborRateRatio;
+	memcpy(&pd.u.gportd.gmClockId, tasglb->gmIdentity, sizeof(ClockIdentity));
 	pd.u.gportd.annPathSequenceCount=bppglb->annPathSequenceCount;
 	if(bppglb->annPathSequenceCount>=MAX_PATH_TRACE_N) return -1;
 	memcpy(&pd.u.gportd.annPathSequence, &bppglb->annPathSequence,
@@ -725,7 +730,6 @@ static int ipc_register_abnormal_event(gptpipc_client_req_data_t *reqdata)
 }
 
 static int ipc_clock_master_clock_notice(gptpnet_data_t *gpnetd,
-					 BmcsPerTimeAwareSystemGlobal *btasglb,
 					 PerTimeAwareSystemGlobal *tasglb, int di)
 {
 	gptpipc_gptpd_data_t ipcd;
@@ -738,7 +742,7 @@ static int ipc_clock_master_clock_notice(gptpnet_data_t *gpnetd,
 	if(!ipcd.u.notice.event_flags) return 0;
 
 	if(ipcd.u.notice.event_flags && GPTPIPC_EVENT_CLOCK_FLAG_GM_CHANGE){
-		memcpy(&ipcd.u.notice.gmPriority, &btasglb->gmPriority,
+		memcpy(&ipcd.u.notice.gmIdentity, &tasglb->gmIdentity,
 		       sizeof(UInteger224));
 	}
 
@@ -801,7 +805,6 @@ static int ipc_clock_notice(gptpman_data_t *gpmand)
 	for(di=0;di<gpmand->max_domains;di++){
 		if(!DOMAIN_DATA_EXIST(di)) continue;
 		ipc_clock_master_clock_notice(gpmand->gpnetd,
-					      gpmand->tasds[di].btasglb,
 					      gpmand->tasds[di].tasglb, di);
 		ipc_clock_this_clock_notice(gpmand->gpnetd, di,
 					    gpmand->tasds[di].tasglb->domainNumber,
@@ -912,7 +915,6 @@ static int gptpnet_ipc_cb(void *cbdata, uint8_t *rdata, int size, struct sockadd
 				gpmand->tasds[di].ptds[reqdata->portIndex].ppglb,
 				gpmand->tasds[di].ptds[reqdata->portIndex].bppglb,
 				gpmand->tasds[di].tasglb,
-				gpmand->tasds[di].btasglb,
 				reqdata->portIndex,
 				reqdata->domainNumber, di, addr);
 		}
@@ -926,7 +928,6 @@ static int gptpnet_ipc_cb(void *cbdata, uint8_t *rdata, int size, struct sockadd
 					gpmand->tasds[di].ptds[pi].ppglb,
 					gpmand->tasds[di].ptds[pi].bppglb,
 					gpmand->tasds[di].tasglb,
-					gpmand->tasds[di].btasglb,
 					pi, gpmand->tasds[di].tasglb->domainNumber, di,
 					addr);
 			}
@@ -1206,6 +1207,7 @@ static int set_domain_thisClock(PerTimeAwareSystemGlobal *tasglb, int domainNumb
 	clockid=gptpclock_clockid(tasglb->thisClockIndex, domainNumber);
 	if(!clockid) return -1;
 	memcpy(tasglb->thisClock, clockid, sizeof(ClockIdentity));
+	memcpy(tasglb->gmIdentity, clockid, sizeof(ClockIdentity));
 	return 0;
 }
 

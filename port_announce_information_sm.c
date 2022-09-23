@@ -124,13 +124,16 @@ static void recordOtherAnnounceInfo(port_announce_information_data_t *sm)
 	sm->bppg->annCurrentUtcOffset = RCVD_ANNOUNCE_PTR->currentUtcOffset;
 	sm->bppg->annTimeSource = RCVD_ANNOUNCE_PTR->timeSource;
 
-	// ??? global pathTrace is updated only when portState is known
+	// ??? Global pathTrace is updated only when portState is known
 	// to be SlavePort, in the case when system is grandmaster (no SlavePort)
-	// and the Announce received may convey transition of portState to SlavePort
-	// a copy of the announce pathSequence should be used for global pathTrace
+	// and the Announce received may convey transition of portState to SlavePort.
+	// A copy of the announce pathSequence should be used for global pathTrace
+	// and a copy of the GM clockIdentity should be placed in global gmIdentity.
 	sm->bppg->annPathSequenceCount = RCVD_ANNOUNCE_PTR->tlvLength / sizeof(ClockIdentity);
 	memcpy(&sm->bppg->annPathSequence, &RCVD_ANNOUNCE_PTR->pathSequence,
 	       RCVD_ANNOUNCE_PTR->tlvLength);
+	memcpy(sm->ptasg->gmIdentity, RCVD_ANNOUNCE_PTR->grandmasterIdentity,
+			sizeof(ClockIdentity));
 }
 
 static port_announce_information_state_t allstate_condition(port_announce_information_data_t *sm)
@@ -178,6 +181,10 @@ static void *aged_proc(port_announce_information_data_t *sm)
 	INFO_IS = Aged;
 	RESELECT[sm->portIndex] = true;
 	SELECTED[sm->portIndex] = false;
+
+	// Clear global copies of pathTrace and set gmIdentity to own clockIdentity
+	sm->bppg->annPathSequenceCount = 0;
+	memcpy(sm->ptasg->gmIdentity, sm->ptasg->thisClock, sizeof(ClockIdentity));
 
 	return NULL;
 }

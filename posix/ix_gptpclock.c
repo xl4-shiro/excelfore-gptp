@@ -22,13 +22,14 @@
 #include <errno.h>
 #include <stdio.h>
 #include <time.h>
+#include <unistd.h>
 #include "gptpclock.h"
 #include "gptp_config.h"
 #include "ll_gptpsupport.h"
 #include "gptpclock_virtual.h"
 
 #define PTPCLOCK_OPEN_TOUT 100 // msec
-ptpclock_state_t gptp_get_ptpfd(char *ptpdev, int *ptpfd)
+ptpclock_state_t gptp_get_ptpfd(char *ptpdev, PTPFD_TYPE *ptpfd)
 {
 	int toutmsec = PTPCLOCK_OPEN_TOUT;
 	ptpclock_state_t state=PTPCLOCK_NOWORK;
@@ -53,12 +54,12 @@ ptpclock_state_t gptp_get_ptpfd(char *ptpdev, int *ptpfd)
 
 	while(true){
 		*ptpfd = ptpdev_clock_open(ptpdev, O_RDWR);
-		if (*ptpfd >= 0){
+		if (PTPFD_VALID(*ptpfd)){
 			state = PTPCLOCK_RDWR;
 			break;
 		}else if (errno==EACCES) {
 			*ptpfd = ptpdev_clock_open(ptpdev, O_RDONLY);
-			if (*ptpfd >= 0){
+			if (PTPFD_VALID(*ptpfd)){
 				UB_LOG(UBL_INFO,"%s:opening %s in READONLY mode\n",
 				       __func__, ptpdev);
 				state = PTPCLOCK_RDONLY;
@@ -71,7 +72,7 @@ ptpclock_state_t gptp_get_ptpfd(char *ptpdev, int *ptpfd)
 		}
 		if(toutmsec>0){
 			// sleep 10msec and try again
-			usleep(10000);
+			CB_USLEEP(10000);
 			toutmsec-=10;
 			continue;
 		}
@@ -83,7 +84,7 @@ ptpclock_state_t gptp_get_ptpfd(char *ptpdev, int *ptpfd)
 	return state;
 }
 
-int gptp_close_ptpfd(int ptpfd)
+int gptp_close_ptpfd(PTPFD_TYPE ptpfd)
 {
 #ifdef PTP_VIRTUAL_CLOCK_SUPPORT
 	if (VIRTUAL_CLOCKFD(ptpfd)) {
@@ -93,7 +94,7 @@ int gptp_close_ptpfd(int ptpfd)
 	return ptpdev_clock_close(ptpfd);
 }
 
-int gptp_clock_adjtime(int ptpfd, int adjppb)
+int gptp_clock_adjtime(PTPFD_TYPE ptpfd, int adjppb)
 {
 #ifdef PTP_VIRTUAL_CLOCK_SUPPORT
 	if (VIRTUAL_CLOCKFD(ptpfd)) {
@@ -121,7 +122,7 @@ int gptpclock_settime_str(char *tstr, int clockIndex, uint8_t domainNumber)
 		}
 		tmv.tm_year-=1900;
 		tmv.tm_mon-=1;
-		ts64=mktime(&tmv)*UB_SEC_NS;
+		ts64=CB_MKTIME(&tmv)*UB_SEC_NS;
 	}
 	gptpclock_setts64(ts64, clockIndex, domainNumber);
 	UB_LOG(UBL_INFO,"set up time to %s\n",tstr);

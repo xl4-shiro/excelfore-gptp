@@ -32,6 +32,7 @@
 #define __GPTPIPC_H_
 
 #include "gptpbasetypes.h"
+#include <stdint.h>
 
 /**
  * @brief IPC node for gptp2 communication
@@ -98,7 +99,7 @@ typedef struct gptpipc_notice_data {
 	int32_t domainNumber;
 	int32_t domainIndex;
 	int32_t portIndex;
-	UInteger224 gmPriority;
+	ClockIdentity gmIdentity;
 	int64_t lastGmPhaseChange_nsec;
 	uint16_t gmTimeBaseIndicator;
 	uint8_t lastGmFreqChangePk[sizeof(double)];
@@ -198,21 +199,27 @@ typedef struct gptpipc_gport_data {
 	uint8_t portOper;
 	uint8_t gmStable;
 	uint8_t selectedState;
-        uint8_t annPathSequenceCount;
+	uint64_t pDelay;
+	double pDelayRateRatio;
+	uint8_t annPathSequenceCount;
 	ClockIdentity annPathSequence[MAX_PATH_TRACE_N];
 } __attribute__((packed)) gptpipc_gport_data_t;
 
 /**
  * @brief gptp clock data.
- *  1. gmsync -> True if synchronized to grand master
- *  2. domainNumber -> The domain number of a gPTP domain
- *  3. portIndex -> index number of the clock port
- *  4. gmTimeBaseIndicator -> timeBaseIndicator of the current grand master
- *  5. lastGmPhaseChange_nsec -> the most recent change in timeBaseIndicator
- *  6. lastGmFreqChange -> the most recent change in timeBaseIndicator
- *  7. domainActive	-> True if this domain is providing the gptp clock
- *  8. clockId -> the clock identiy of this clock port
- *  9. gmClockId -> the clock identiy of the current grand master clock
+ *  1. domainNumber -> The domain number of a gPTP domain
+ *  2. portIndex -> index number of the clock port
+ *  3. lastGmPhaseChange_nsec -> the most recent change in timeBaseIndicator
+ *  4. clockId -> the clock identiy of this clock port
+ *  5. gmClockId -> the clock identiy of the current grand master clock
+ *  6. lastSyncReceiptTime_nsec ->
+ *  7. lastSyncReceiptLocalTime_nsec ->
+ *  8. adjppb -> adjustment value
+ *  9. gmTimeBaseIndicator -> timeBaseIndicator of the current grand master
+ *  10. lastSyncSeqID -> sequence number of the last Sync/FollowUp received
+ *  11. gmsync -> True if synchronized to grand master
+ *  12. domainActive -> True if this domain is providing the gptp clock
+ *  13. lastGmFreqChangePk -> the last
  */
 typedef struct gptpipc_clock_data{
 	int32_t domainNumber;
@@ -220,10 +227,13 @@ typedef struct gptpipc_clock_data{
 	int64_t lastGmPhaseChange_nsec;
 	ClockIdentity clockId;
 	ClockIdentity gmClockId;
+	uint64_t lastSyncReceiptTime_nsec;
+	uint64_t lastSyncReceiptLocalTime_nsec;
+	int32_t adjppb;
+	uint16_t gmTimeBaseIndicator;
+	uint16_t lastSyncSeqID;
 	uint8_t gmsync;
 	uint8_t domainActive;
-	uint16_t gmTimeBaseIndicator;
-	int32_t adjppb;
 	uint8_t lastGmFreqChangePk[sizeof(double)];
 } __attribute__((packed)) gptpipc_clock_data_t;
 

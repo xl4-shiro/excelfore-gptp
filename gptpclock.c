@@ -309,7 +309,7 @@ static int gptpclock_setts_od(int64_t ts64, oneclock_data_t *od)
 /* returns latency time in this function, if it is too long this setting is not accurate */
 static int64_t time_setoffset64(int64_t ts64, int clockIndex, uint8_t domainNumber)
 {
-	int64_t ats64;
+	int64_t ats64=-1;
 	int64_t mt1,mt2;
 	oneclock_data_t *od;
 	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
@@ -331,7 +331,7 @@ static int avarage_time_setoffset(int clockIndex, uint8_t domainNumber)
 	for(i=0;i<10;i++){
 		v = time_setoffset64(0, clockIndex, domainNumber);
 		if(v > gptpconf_get_intitem(CONF_MAX_CONSEC_TS_DIFF)) continue;
-		if(labs(vmax)<labs(v)) vmax=v;
+		if(llabs(vmax)<llabs(v)) vmax=v;
 		av += v;
 		count ++;
 	}
@@ -486,7 +486,7 @@ int gptpclock_apply_offset(int64_t *ts64, int clockIndex, uint8_t domainNumber)
 
 int64_t gptpclock_getts64(int clockIndex, uint8_t domainNumber)
 {
-	int64_t ts64;
+	int64_t ts64=-1;
 	oneclock_data_t *od;
 	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
 	gptpclock_getts_od(&ts64, od);
@@ -663,7 +663,7 @@ static int diff_in_two_clocks(int64_t *tss64,
 			      int clockIndex1, uint8_t domainNumber1)
 {
 	oneclock_data_t *od, *od1;
-	int64_t ts1, ts2, ts3;
+	int64_t ts1=-1, ts2=-1, ts3=-1;
 
 	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
 	GPTPCLOCK_FN_ENTRY(od1, clockIndex1, domainNumber1);
@@ -826,15 +826,17 @@ int gptpclock_active_domain_status(void)
 	return gcd.shm->head.active_domain;
 }
 
-int gptpclock_set_gmsync(int clockIndex, uint8_t domainNumber, bool becomeGM)
+int gptpclock_set_gmsync(int clockIndex, uint8_t domainNumber, ClockIdentity gmIdentity, bool becomeGM)
 {
 	oneclock_data_t *od;
 	UB_LOG(UBL_DEBUGV, "%s:clockIndex=%d, domainNumber=%d, becomeGM=%d\n",
 	       __func__, clockIndex, domainNumber, becomeGM);
 	GPTPCLOCK_FN_ENTRY(od, clockIndex, domainNumber);
 	if(od->pp->gmsync) return 0;
-	if(becomeGM)
+	if(becomeGM){
 		gcd.pdd[od->domainIndex].we_are_gm=true;
+		memcpy(gcd.pdd[od->domainIndex].gmClockId, gmIdentity, sizeof(ClockIdentity));
+	}
 	else
 		gcd.pdd[od->domainIndex].we_are_gm=false;
 
@@ -998,7 +1000,7 @@ mutexout:
 int64_t gptpclock_d0ClockfromRT(int clockIndex)
 {
 	oneclock_data_t *od;
-	int64_t ts1, ts2, ts3;
+	int64_t ts1=-1, ts2=-1, ts3=-1;
 	GPTPCLOCK_FN_ENTRY(od, clockIndex, 0);
 	if(gptpclock_getts_od(&ts1, od)){
 		UB_LOG(UBL_ERROR, "%s:can't get ts1=TS(clk=%d,D=%d)\n",

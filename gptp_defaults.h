@@ -43,6 +43,12 @@
 
 #define DEFAULT_TXTS_LOST_TIME 20000000 //20msec, give up if no TxTS in this time
 
+/* Protocol-defined priority for all outgoing packets.
+   This can be used to assign network queues for use on a per-protocol basis.
+   Note that this does not add VLAN tag to the outgoing packets. Refer to
+   SO_PRIORITY for relevant information. */
+#define DEFAULT_SOCKET_TXPRIORITY 0
+
 /* to set up the second domain, set this number for the clockIndex which is used
    for the second domain. For the second domin, only thisClock and master clock
    are added. CONF_CMLDS_MODE must be set to use multiple domains.
@@ -201,6 +207,9 @@
 #define DEFAULT_PHASE_OFFSET_IIR_ALPHA_STABLE_VALUE 10 // reciprocal number is used
 
 #define DEFAULT_FREQ_OFFSET_STABLE_PPB 100 // freq. is stable if delta of adj rate is less then this
+
+#define DEFAULT_CLOCK_COMPUTE_INTERVAL_MSEC 1000 // compute phase and freq every this time
+#define DEFAULT_FREQ_OFFSET_UPDATE_MRATE_PPB 10 // update freq offset only when the abs of diff to the new rate is bigger than this
 
 // switch active domain automatically to stable domain
 // 2: even the current active domain is stable, if any lower number of domain is stable

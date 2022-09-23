@@ -93,6 +93,7 @@ static void *send_sync_indication_proc(clock_slave_sync_data_t *sm)
 				 RCVD_PSSYNC_PTR->local_ppg->forAllDomain->neighborRateRatio) +
 				RCVD_PSSYNC_PTR->local_ppg->forAllDomain->delayAsymmetry.nsec;
 
+		sm->ptasg->lastSyncSeqID = RCVD_PSSYNC_PTR->lastSyncSeqID;
 		sm->ptasg->syncReceiptTime.seconds.lsb = nsec / UB_SEC_NS;
 		sm->ptasg->syncReceiptTime.fractionalNanoseconds.msb = nsec % UB_SEC_NS;
 
@@ -107,6 +108,20 @@ static void *send_sync_indication_proc(clock_slave_sync_data_t *sm)
 		sm->ptasg->gmTimeBaseIndicator = RCVD_PSSYNC_PTR->gmTimeBaseIndicator;
 		sm->ptasg->lastGmPhaseChange = RCVD_PSSYNC_PTR->lastGmPhaseChange;
 		sm->ptasg->lastGmFreqChange = RCVD_PSSYNC_PTR->lastGmFreqChange;
+
+		/* 'static port config' and 'this is not GM'
+		   Since BMCS is not performed, port_announce port_state_selection SMs
+		   will not be able to get GM information.
+		   For static port slave mode, consider the peer clockId as the GM.
+		*/
+		if(gptpconf_get_intitem(CONF_STATIC_PORT_STATE_SLAVE_PORT)>0){
+			if(memcmp(sm->ptasg->gmIdentity, RCVD_PSSYNC_PTR->sourcePortIdentity.clockIdentity,
+						sizeof(ClockIdentity))!=0){
+				memcpy(sm->ptasg->gmIdentity, RCVD_PSSYNC_PTR->sourcePortIdentity.clockIdentity,
+						sizeof(ClockIdentity));
+				gptpclock_set_gmchange(sm->ptasg->domainNumber, sm->ptasg->gmIdentity);
+			}
+		}
 
 		// this may need IPC notice
 		//invokeApplicationInterfaceFunction (ClockTargetPhaseDiscontinuity.result);

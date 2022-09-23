@@ -66,6 +66,7 @@ struct md_sync_receive_data{
 static MDSyncReceive *setMDSyncReceive(md_sync_receive_data_t *sm)
 {
 	sm->mdSyncReceive.domainNumber = RCVD_SYNC_PTR->head.domainNumber;
+	sm->mdSyncReceive.seqid = ntohs(RCVD_SYNC_PTR->head.sequenceId_ns);
 	sm->mdSyncReceive.followUpCorrectionField.nsec =
 		(UB_NTOHLL((uint64_t)RCVD_SYNC_PTR->head.correctionField_nll)>>16);
 

@@ -60,7 +60,6 @@ struct clock_master_sync_receive_data{
 #define RCVD_CLOCK_SOURCE_REQ_PTR sm->thisSM->rcvdClockSourceReqPtr
 #define	RCVD_LOCAL_CLOCK_TICK sm->thisSM->rcvdLocalClockTick
 
-#define CMSR_UPDATE_DTS (1*UB_SEC_NS) // compute phase and freq, every this time,
 //if passing time between GM and thisClock, no way to calculate the freq offset
 #define CMSR_TOO_BIG_PASSTIME_GAP (UB_SEC_NS/10)
 
@@ -73,8 +72,6 @@ struct clock_master_sync_receive_data{
 #define FREQ_OFFSET_STABLE_TRNS 3
 // unstable if delta of adj rate is bigger than this
 #define FREQ_OFFSET_UNSTABLE_PPB 1000
-// update freq offset only when the diff to the new rate is bigger than this
-#define FREQ_OFFSET_UPDATE_MRATE_PPB 10
 
 #define PHASE_NEWGM_CRITERION 1000000 // 1msec
 #define PHASE_STABLE_CRITERION 10000 // 10usec
@@ -104,7 +101,7 @@ static int set_phase_offsetGM(clock_master_sync_receive_data_t *sm, int64_t dts,
 	int64_t offsetGM=0;
 	int padj_clockindex, poabf;
 
-	dofg=labs(dts-sm->offsetGM);
+	dofg=llabs(dts-sm->offsetGM);
 	if(dofg>=PHASE_NEWGM_CRITERION){
 		if(sm->gmchange_ind &&
 		   sm->gmchange_ind==gptpclock_get_gmchange_ind(sm->ptasg->domainNumber)){
@@ -125,7 +122,8 @@ static int set_phase_offsetGM(clock_master_sync_receive_data_t *sm, int64_t dts,
 		sm->offsetGM_stable=OFFSET_START_ADJ;
 	}
 
-	if((dlts < CMSR_UPDATE_DTS) && (sm->offsetGM_stable > OFFSET_START_ADJ)) {
+	if((dlts < gptpconf_get_intitem(CONF_CLOCK_COMPUTE_INTERVAL_MSEC)*UB_MSEC_NS)
+	   && (sm->offsetGM_stable > OFFSET_START_ADJ)) {
 		// once it reaches adjustment stage, use longer interval
 		return SET_PHASE_OFFSETGM_NOOP_RETURN;
 	}
@@ -176,16 +174,20 @@ static int set_phase_offsetGM(clock_master_sync_receive_data_t *sm, int64_t dts,
 		poabf=PHASE_OFFSET_ADJUST_BY_FREQ;
 		padj_clockindex=0;
 	}
-	if(labs(od)<poabf && gptpconf_get_intitem(CONF_PHASE_ADJUSTMENT_BY_FREQ)){
-		if(labs(od)<PHASE_OFFSET_ADJUST_TARGET) return od/10;
+	if(llabs(od)<poabf && gptpconf_get_intitem(CONF_PHASE_ADJUSTMENT_BY_FREQ)){
+		if(llabs(od)<PHASE_OFFSET_ADJUST_TARGET) return od;
 		UB_LOG(UBL_INFO, "%s:domainNumber=%d, offset adjustment by Freq., diff=%d\n",
-		       __func__, sm->ptasg->domainNumber, (int)(od/10));
-		return od/10;
+		       __func__, sm->ptasg->domainNumber, (int)(od));
+		return od;
 	}
 	UB_LOG(UBL_INFO, "%s:domainNumber=%d, offset adjustment, diff=%d\n",
 	       __func__, sm->ptasg->domainNumber, (int)od);
 	gptpclock_setoffset64(offsetGM, padj_clockindex, sm->ptasg->domainNumber);
-	sm->offsetGM=offsetGM;
+	if(gptpconf_get_intitem(CONF_USE_HW_PHASE_ADJUSTMENT) && sm->ptasg->domainNumber==0){
+		sm->offsetGM=0;
+	}else{
+		sm->offsetGM=offsetGM;
+	}
 	return 0;
 }
 
@@ -206,7 +208,7 @@ static int computeGmRateRatio(clock_master_sync_receive_data_t *sm,
 	dmts = mts - sm->last_mts;
 	sm->last_lts = lts;
 	sm->last_mts = mts;
-	if(labs(dmts-dlts) > CMSR_TOO_BIG_PASSTIME_GAP) return -1;
+	if(llabs(dmts-dlts) > CMSR_TOO_BIG_PASSTIME_GAP) return -1;
 	// IIR filter, M(n) = a*R(n) + (1-a)*M(n-1), a=CMSR_IIR_COEFF
 	nrate = sm->alpha * ((double)dmts/(double)dlts) +
 		(1-sm->alpha)*sm->mrate;
@@ -234,7 +236,7 @@ static int computeGmRateRatio(clock_master_sync_receive_data_t *sm,
 	       __func__, sm->ptasg->domainNumber, ppb);
 
 	ppb+=offset_comp;
-	if(abs(ppb) > FREQ_OFFSET_UPDATE_MRATE_PPB){
+	if(abs(ppb) > gptpconf_get_intitem(CONF_FREQ_OFFSET_UPDATE_MRATE_PPB)){
 		int maxadj=gptpconf_get_intitem(CONF_MAX_ADJUST_RATE_ON_CLOCK);
 		sm->gmadjppb += ppb;
 		if(sm->gmadjppb > maxadj){
@@ -319,7 +321,7 @@ static void *receive_source_time_proc(clock_master_sync_receive_data_t *sm)
 		sm->ptasg->clockSourceLastGmPhaseChange = sm->ptasg->lastGmPhaseChange;
 		sm->ptasg->clockSourceLastGmFreqChange = sm->ptasg->lastGmFreqChange;
 
-		gptpclock_set_gmsync(0, sm->ptasg->domainNumber, false);
+		gptpclock_set_gmsync(0, sm->ptasg->domainNumber, sm->ptasg->gmIdentity, false);
 	}
 	RCVD_CLOCK_SOURCE_REQ = false;
 	RCVD_LOCAL_CLOCK_TICK = false;
