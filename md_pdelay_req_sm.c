@@ -65,6 +65,16 @@ struct md_pdelay_req_data{
 #define RCVD_PDELAY_RESP_FOLLOWUP sm->thisSM->rcvdPdelayRespFollowUp
 #define RCVD_PDELAY_RESP_FOLLOWUP_PTR sm->thisSM->rcvdPdelayRespFollowUpPtr
 
+static bool isPdelayIntervalTimerExpired(md_pdelay_req_data_t *sm, uint64_t cts64)
+{
+	const int round = 1000000;
+	uint64_t tsdiff = cts64 - sm->thisSM->pdelayIntervalTimer.nsec;
+	// align time in @round so that we can accept the case that tsdiff is very closed
+	// to the pdelayIntervalTimer
+	tsdiff = ((tsdiff + (round/2))/round)*round;
+	return (tsdiff >= sm->mdeg->forAllDomain->pdelayReqInterval.nsec);
+}
+
 static MDPTPMsgPdelayReq *setPdelayReq(md_pdelay_req_data_t *sm)
 {
 	MDPTPMsgPdelayReq *sdata;
@@ -120,7 +130,7 @@ static double computePdelayRateRatio(md_pdelay_req_data_t *sm, double oldRateRat
 			sm->thisSM->neighborRateRatioValid=true;
 		}
 	}
-	UB_LOG(UBL_DEBUG, "%s: old pDelayRateRatio %.17g -> %.17g : ave=%.17g  min=%"PRIu64" max=%"PRIu64" dt1=%"PRIu64" dt2=%"PRIu64"\n",
+	UB_LOG(UBL_INFO, "%s: old pDelayRateRatio %.17g -> %.17g : ave=%.17g  min=%"PRIu64" max=%"PRIu64" dt1=%"PRIu64" dt2=%"PRIu64"\n",
 			__func__, oldRateRatio, pDelayRateRatio,
 			(double)(oldRateRatio+pDelayRateRatio)/2, mind, maxd, dt1, dt2);
 	sm->prev_t1ts64 = sm->t1ts64;
@@ -145,12 +155,18 @@ static uint64_t computePropTime(md_pdelay_req_data_t *sm)
 	 */
 	rts = ( sm->ppg->forAllDomain->neighborRateRatio*(int64_t)(sm->t4ts64 - sm->t1ts64) -
 		(int64_t)(sm->t3ts64 - sm->t2ts64) )/2;
+
+	UB_LOG(UBL_INFO, "%s: neighborRateRatio: %.17g\n", __func__, sm->ppg->forAllDomain->neighborRateRatio);
+	UB_LOG(UBL_INFO, "%s: t4 - t1 = %"PRIi64" - %"PRIi64" = %"PRIi64"\n",
+	       __func__, sm->t4ts64, sm->t1ts64, sm->t4ts64-sm->t1ts64);
+	UB_LOG(UBL_INFO, "%s: t3 - t2 = %"PRIi64" - %"PRIi64" = %"PRIi64"\n",
+	       __func__, sm->t3ts64, sm->t2ts64, sm->t3ts64-sm->t2ts64);
 	if(rts<0 || rts>COMPUTED_PROP_TIME_TOO_BIG){
 		UB_LOG(UBL_WARN, "%s: computed PropTime is out of range = %"PRIi64", set 0\n",
 		       __func__, rts);
 		rts=0;
 	}else{
-		UB_LOG(UBL_DEBUGV, "%s: computed PropTime = %"PRIu64"\n", __func__, rts);
+		UB_LOG(UBL_INFO, "%s: computed PropTime = %"PRIu64"\n", __func__, rts);
 	}
 	return rts;
 }
@@ -303,8 +319,7 @@ static md_pdelay_req_state_t reset_condition(md_pdelay_req_data_t *sm, uint64_t 
 			}
 		}
 	}
-	if((cts64 - sm->thisSM->pdelayIntervalTimer.nsec >=
-	    sm->mdeg->forAllDomain->pdelayReqInterval.nsec)){
+	if(isPdelayIntervalTimerExpired(sm, cts64)){
 		return SEND_PDELAY_REQ;
 	}
 	return RESET;
@@ -364,8 +379,7 @@ static md_pdelay_req_state_t waiting_for_pdelay_resp_condition(md_pdelay_req_dat
 							       uint64_t cts64)
 {
 	UB_LOG(UBL_DEBUGV, "%s:portIndex=%d\n", __func__, sm->portIndex);
-	if((cts64 - sm->thisSM->pdelayIntervalTimer.nsec >=
-	    sm->mdeg->forAllDomain->pdelayReqInterval.nsec)) {
+	if(isPdelayIntervalTimerExpired(sm, cts64)){
 		UB_LOG(UBL_DEBUGV, "%s:pdelayIntervalTimer timedout\n", __func__);
 		return RESET;
 	}
@@ -452,8 +466,7 @@ static void *waiting_for_pdelay_resp_follow_up_proc(md_pdelay_req_data_t *sm)
 static md_pdelay_req_state_t waiting_for_pdelay_resp_follow_up_condition(
 	md_pdelay_req_data_t *sm, uint64_t cts64)
 {
-	if(cts64 - sm->thisSM->pdelayIntervalTimer.nsec >=
-	   sm->mdeg->forAllDomain->pdelayReqInterval.nsec) {
+	if(isPdelayIntervalTimerExpired(sm, cts64)){
 		UB_LOG(UBL_DEBUG, "%s:portIndex=%d, pdelayIntervalTimer timedout\n",
 		       __func__, sm->portIndex);
 		return RESET;
@@ -538,6 +551,7 @@ static md_pdelay_req_state_t waiting_for_pdelay_resp_follow_up_condition(
 
 static void *waiting_for_pdelay_interval_timer_proc(md_pdelay_req_data_t *sm)
 {
+	uint64_t prev_neighborRateRatioNs=sm->ppg->forAllDomain->neighborPropDelay.nsec;
 	UB_LOG(UBL_DEBUGV, "md_pdelay_req:%s:portIndex=%d\n", __func__, sm->portIndex);
 	RCVD_PDELAY_RESP_FOLLOWUP = false;
 	sm->thisSM->lostResponses = 0;
@@ -585,23 +599,38 @@ static void *waiting_for_pdelay_interval_timer_proc(md_pdelay_req_data_t *sm)
 
 	if(memcmp(RCVD_PDELAY_RESP_PTR->head.sourcePortIdentity.clockIdentity,
 		  sm->ptasg->thisClock, sizeof(ClockIdentity))) {
-		UB_TLOG(UBL_INFO, "%s:portIndex=%d, sourcePortIdentity="UB_PRIhexB8
-			 ", thisClock="UB_PRIhexB8", neighborPropDelay=%"PRIu64"\n",
-			 __func__, sm->portIndex,
-		       UB_ARRAY_B8(RCVD_PDELAY_RESP_PTR->head.sourcePortIdentity.clockIdentity),
-		       UB_ARRAY_B8(sm->ptasg->thisClock),
-		       sm->ppg->forAllDomain->neighborPropDelay.nsec);
-		goto noascapable;
+		if(sm->thisSM->neighborRateRatioValid){
+			// At this point the computed neighborPropDelay is likely erroneous
+			// and that a valid neighborPropDelay has been computed prior, thus
+			// this particulat neighborPropDelay should be considered as fault
+			// and previous value should be used to prevent unlikely deviation.
+			goto detectedfault;
+		}else{
+			// This block handles the case that the computeNeighborPropDelay may
+			// or may not be valid (e.g. from first set of Pdelay messages)
+			// this will not be considered fault but will retain non-asCapable.
+			UB_TLOG(UBL_WARN, "%s:portIndex=%d, sourcePortIdentity="UB_PRIhexB8
+					", thisClock="UB_PRIhexB8", neighborPropDelay=%"PRIu64"\n",
+					__func__, sm->portIndex,
+					UB_ARRAY_B8(RCVD_PDELAY_RESP_PTR->head.sourcePortIdentity.clockIdentity),
+					UB_ARRAY_B8(sm->ptasg->thisClock),
+					sm->ppg->forAllDomain->neighborPropDelay.nsec);
+			goto noascapable;
+		}
 	}
 
 detectedfault:
 	if(sm->thisSM->detectedFaults <= sm->mdeg->forAllDomain->allowedFaults){
 		sm->thisSM->detectedFaults += 1;
-		UB_LOG(UBL_WARN, "%s:portIndex=%d detected fault=%d/%d\n", __func__,
+		UB_LOG(UBL_DEBUG, "%s:portIndex=%d detected fault=%d/%d\n", __func__,
 				sm->portIndex, sm->thisSM->detectedFaults,
 				sm->mdeg->forAllDomain->allowedFaults);
+		UB_LOG(UBL_WARN, "%s:portIndex=%d, likely erroneous neighborPropDelay, use previous value=%"PRIu64"\n",
+		     __func__, sm->portIndex, prev_neighborRateRatioNs);
+		sm->ppg->forAllDomain->neighborPropDelay.nsec = prev_neighborRateRatioNs;
 		return NULL;
 	}
+
 noascapable:
 	UB_LOG(UBL_INFO, "%s:portIndex=%d, not asCapable\n", __func__, sm->portIndex);
 	sm->mdeg->forAllDomain->asCapableAcrossDomains = false;
@@ -613,9 +642,7 @@ noascapable:
 static md_pdelay_req_state_t waiting_for_pdelay_interval_timer_condition(
 	md_pdelay_req_data_t *sm, uint64_t cts64)
 {
-	if((cts64 - sm->thisSM->pdelayIntervalTimer.nsec >=
-	    sm->mdeg->forAllDomain->pdelayReqInterval.nsec))
-		return SEND_PDELAY_REQ;
+	if(isPdelayIntervalTimerExpired(sm, cts64)){return SEND_PDELAY_REQ;}
 	return WAITING_FOR_PDELAY_INTERVAL_TIMER;
 }
 
@@ -760,8 +787,8 @@ void md_pdelay_req_sm_recv_resp(md_pdelay_req_data_t *sm, event_data_recv_t *edr
 	tsec = ntohl(RCVD_PDELAY_RESP_PTR->requestReceiptTimestamp.seconds_lsb_nl);
 	tns = ntohl(RCVD_PDELAY_RESP_PTR->requestReceiptTimestamp.nanoseconds_nl);
 	sm->t2ts64 = (uint64_t)tsec * UB_SEC_NS + (uint64_t)tns;
-	md_pdelay_req_sm(sm, cts64);
 	sm->t4ts64 = edrecv->ts64;
+	md_pdelay_req_sm(sm, cts64);
 	sm->statd.pdelay_resp_rec++;
 }
 
